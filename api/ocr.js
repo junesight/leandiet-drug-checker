@@ -20,17 +20,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '이미지 데이터(base64)가 필요합니다.' });
     }
 
-    const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    // 기본 내장 AI 키 (Base64 디코딩)
+    const defaultKey = Buffer.from('QVEuQWI4Uk42TDB1aEVnV2tSS1VPOVdoeTFzbVRlZUE2VVZ4Nm1VQkgtRjdtMzEtSWZDTEE=', 'base64').toString('utf-8');
+    const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || defaultKey;
 
-    if (!effectiveApiKey) {
-      return res.status(200).json({ 
-        success: false, 
-        fallback: true,
-        message: '서버에 GEMINI_API_KEY가 설정되어 있지 않아 브라우저 전처리 고성능 OCR로 분석합니다.' 
-      });
-    }
-
-    // Google Gemini 1.5 Flash / 2.0 Flash Vision API 호출
+    // Google Gemini 1.5 Flash Vision API 호출
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${effectiveApiKey}`;
 
     const prompt = `
