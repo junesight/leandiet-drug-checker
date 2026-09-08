@@ -448,7 +448,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
         <div class="flex-1 min-w-0 space-y-1">
           <div class="flex items-center justify-between">
             <span id="ocr-status-text" class="text-xs sm:text-sm font-bold text-slate-800">
-              ${savedKey ? '✨ 99.9% Gemini AI Vision 판독 중...' : '📸 이미지 전처리 및 의약품 인식 중...'}
+              ✨ Google Gemini AI Vision 으로 초정밀 분석중...
             </span>
             <span id="ocr-percentage" class="text-xs font-extrabold text-[#6340cd]">0%</span>
           </div>
@@ -481,7 +481,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
     const { blob: processedBlob, dataUrl } = await preprocessAndRotateImage(file, rotationAngle);
     const base64Data = dataUrl;
     
-    if (statusText) statusText.innerText = '🤖 AI Vision 처방전 분석 중...';
+    if (statusText) statusText.innerText = '✨ Google Gemini AI Vision 으로 초정밀 분석중...';
     if (progressBar) progressBar.style.width = '45%';
     if (percentage) percentage.innerText = '45%';
 
@@ -510,9 +510,9 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
     console.warn('AI Vision Fallback to Local OCR:', e);
   }
 
-  // STEP 2: 브라우저 고성능 Canvas 회전/전처리 + Tesseract OCR + 슬라이딩 윈도우 퍼지 매칭
+  // STEP 2: AI 한도 초과 시 브라우저 고성능 Canvas 회전/전처리 + Tesseract OCR Fallback
   try {
-    if (statusText) statusText.innerText = '🔍 고화질 이미지 전처리(대비강화·회전보정) 진행 중...';
+    if (statusText) statusText.innerText = '⚠️ AI 무료 한도 초과 → 일반 OCR 모드로 분석중... (직접 검색 권장)';
     if (progressBar) progressBar.style.width = '30%';
     if (percentage) percentage.innerText = '30%';
 
@@ -522,7 +522,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
       throw new Error('OCR 엔진(Tesseract.js)을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.');
     }
 
-    if (statusText) statusText.innerText = '한국어/의약품 문자 인식 모델 구동 중...';
+    if (statusText) statusText.innerText = '⚠️ AI 무료 한도 초과 → 일반 OCR 모드로 분석중... (직접 검색 권장)';
 
     const worker = await Tesseract.createWorker('kor+eng', 1, {
       logger: m => {
@@ -530,7 +530,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
           const pct = Math.round(30 + (m.progress || 0) * 60);
           if (progressBar) progressBar.style.width = `${pct}%`;
           if (percentage) percentage.innerText = `${pct}%`;
-          if (statusText) statusText.innerText = `처방전 글자 인식 중... (${pct}%)`;
+          if (statusText) statusText.innerText = `⚠️ AI 무료 한도 초과 → 일반 OCR 모드로 분석중... (${pct}%)`;
         }
       }
     });
@@ -587,7 +587,7 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribe
           <img src="${imageUrl}" alt="첨부 처방전" class="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0" />
           <div>
             <div class="flex items-center gap-1.5 text-xs font-bold text-[#6340cd]">
-              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 처방전 의약품 분석 완료 (${drugs.length}종 식별)
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ✨ Google Gemini AI Vision 초정밀 분석 완료 (${drugs.length}종 식별)
             </div>
             <p class="text-xs text-slate-500">처방전의 의약품 및 성분 대조가 완료되었습니다.</p>
           </div>
@@ -696,7 +696,7 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribe
         ` : `
           <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
             <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
-            현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
+            현재 등록된 254종(금기 67종 / 주의 187종)의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
           </div>
         `}
       </div>
@@ -932,14 +932,14 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
 
   if (statusArea) {
     statusArea.innerHTML = `
-      <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between">
+      <div class="bg-white rounded-2xl p-4 border border-amber-200 bg-amber-50/30 shadow-sm flex items-center justify-between">
         <div class="flex items-center gap-3">
           <img src="${imageUrl}" alt="첨부 처방전" class="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0" />
           <div>
-            <div class="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 고화질 전처리 OCR 분석 완료
+            <div class="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-600"></i> ⚠️ AI 무료 한도 초과 → 일반 OCR 모드로 분석 완료
             </div>
-            <p class="text-xs text-slate-500">이미지 보정 및 670여 종 마스터 의약품 DB 대조가 완료되었습니다.</p>
+            <p class="text-xs text-slate-500">인쇄 상태에 따라 오차가 있을 수 있으니 약 이름 직접 검색을 권장합니다.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -1086,7 +1086,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
         ` : `
           <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
             <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
-            현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
+            현재 등록된 254종(금기 67종 / 주의 187종)의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
           </div>
         `}
       </div>
@@ -1108,7 +1108,23 @@ ${rawText || '추출된 텍스트가 없습니다.'}
     </details>
   `;
 
+  const quotaFallbackBanner = `
+    <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center space-y-2 shadow-sm mb-4">
+      <div class="flex items-center justify-center gap-1.5 text-amber-900 font-extrabold text-xs sm:text-sm">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
+        <span>⚠️ AI 무료 한도 초과 → 일반 OCR 모드로 분석되었습니다.</span>
+      </div>
+      <p class="text-xs text-amber-800">
+        작은 글씨나 인쇄 폰트에 따라 약품명이 일부 오인식될 수 있으니, 정확한 판독을 위해 <strong>[약 이름 / 성분명 검색]</strong> 탭에서 직접 검색해 보시길 권장합니다.
+      </p>
+      <button onclick="switchTab('text')" class="mt-1 inline-flex items-center gap-1.5 px-4 py-2 bg-[#6340cd] text-white text-xs font-bold rounded-xl hover:bg-[#502bb8] transition shadow-sm">
+        <i data-lucide="search" class="w-3.5 h-3.5"></i> 약 이름 / 성분명 검색하러 가기
+      </button>
+    </div>
+  `;
+
   resultArea.innerHTML = `
+    ${quotaFallbackBanner}
     ${summaryBanner}
     ${unparsedWarningHtml}
     ${cardsHtml ? `<div class="space-y-3">${cardsHtml}</div>` : ''}
@@ -1391,7 +1407,7 @@ async function handleBatchSearch(tokens) {
         ` : `
           <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
             <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
-            현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
+            현재 등록된 254종(금기 67종 / 주의 187종)의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
           </div>
         `}
       </div>
@@ -1533,7 +1549,7 @@ async function fetchFromMfdsApi(query) {
             ` : `
               <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
                 <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
-                현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
+                현재 등록된 254종(금기 67종 / 주의 187종)의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
               </div>
             `}
           </div>
