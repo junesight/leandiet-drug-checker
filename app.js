@@ -5,8 +5,10 @@
  * - 🟢 병용 가능 (초록색)
  */
 
-// 초성 추출 유틸리티
+// 초성, 중성, 종성 분해 유틸리티 (퍼지 오타 매칭용)
 const CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+const JUNGSEUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ'];
+const JONGSEUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
 
 function getChosung(str) {
   if (!str) return '';
@@ -15,6 +17,24 @@ function getChosung(str) {
     const code = str.charCodeAt(i) - 44032;
     if (code >= 0 && code <= 11171) {
       result += CHOSUNG[Math.floor(code / 588)];
+    } else {
+      result += str.charAt(i);
+    }
+  }
+  return result.toLowerCase();
+}
+
+// 한글 음절을 자모(초성+중성+종성) 단위로 분해
+function decomposeHangul(str) {
+  if (!str) return '';
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i) - 44032;
+    if (code >= 0 && code <= 11171) {
+      const cho = Math.floor(code / 588);
+      const jung = Math.floor((code % 588) / 28);
+      const jong = code % 28;
+      result += CHOSUNG[cho] + JUNGSEUNG[jung] + (JONGSEUNG[jong] || '');
     } else {
       result += str.charAt(i);
     }
@@ -46,18 +66,27 @@ function levenshteinDistance(s1, s2) {
   return dp[m][n];
 }
 
-// 문자열 유사도 계산
+// 문자열 유사도 계산 (일반 문자열 + 한글 자모 단위 퍼지 유사도 결합)
 function stringSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
   const s1Clean = s1.replace(/[\s\-_]/g, '').toLowerCase();
   const s2Clean = s2.replace(/[\s\-_]/g, '').toLowerCase();
   if (s1Clean === s2Clean) return 1.0;
-  if (s1Clean.includes(s2Clean) || s2Clean.includes(s1Clean)) return 0.85;
+  if (s1Clean.includes(s2Clean) || s2Clean.includes(s1Clean)) return 0.88;
 
+  // 1. 음절 단위 유사도
   const maxLen = Math.max(s1Clean.length, s2Clean.length);
-  if (maxLen === 0) return 1.0;
-  const dist = levenshteinDistance(s1Clean, s2Clean);
-  return (maxLen - dist) / maxLen;
+  const charDist = levenshteinDistance(s1Clean, s2Clean);
+  const charSim = maxLen === 0 ? 1.0 : (maxLen - charDist) / maxLen;
+
+  // 2. 자모 단위 분해 유사도 (오타/자모 오인식 강력 교정: 예: 레일라디에스청 vs 레일라디에스정)
+  const s1Jamo = decomposeHangul(s1Clean);
+  const s2Jamo = decomposeHangul(s2Clean);
+  const jamoMax = Math.max(s1Jamo.length, s2Jamo.length);
+  const jamoDist = levenshteinDistance(s1Jamo, s2Jamo);
+  const jamoSim = jamoMax === 0 ? 1.0 : (jamoMax - jamoDist) / jamoMax;
+
+  return Math.max(charSim, jamoSim);
 }
 
 // 연속 텍스트 내 슬라이딩 윈도우(Sliding Window) 퍼지 검색
@@ -94,7 +123,6 @@ function init() {
   renderInitialGuide();
   renderAllModalList();
   setupClipboardPaste();
-  loadAiKeyInput();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -219,7 +247,7 @@ function fileToBase64(file) {
   });
 }
 
-// 캔버스 기반 회전 + 고화질 전처리
+// 캔버스 기반 회전 + 고화질 전처리 (2.5배 업스케일링 + 명암대비 극대화 + 라플라시안 샤프닝)
 async function preprocessAndRotateImage(file, rotationDegrees = 0) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -227,10 +255,11 @@ async function preprocessAndRotateImage(file, rotationDegrees = 0) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
+      // 1. 작은 글씨(8pt) 자모음 뭉개짐 방지를 위한 2.0~2.5배 업스케일링
       let scale = 1;
       const baseWidth = (rotationDegrees === 90 || rotationDegrees === 270) ? img.height : img.width;
-      if (baseWidth < 1600) {
-        scale = Math.min(2.5, 1800 / baseWidth);
+      if (baseWidth < 1800) {
+        scale = Math.min(2.5, 2200 / baseWidth);
       }
 
       const drawWidth = Math.round(img.width * scale);
@@ -254,31 +283,49 @@ async function preprocessAndRotateImage(file, rotationDegrees = 0) {
 
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imgData.data;
+      const w = canvas.width;
+      const h = canvas.height;
 
-      // 대비 평활화
+      // 2. 그레이스케일 변환 및 히스토그램 스트레칭
       let minVal = 255;
       let maxVal = 0;
-      for (let i = 0; i < d.length; i += 4) {
+      const grayData = new Uint8Array(w * h);
+
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
         const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        grayData[p] = gray;
         if (gray < minVal) minVal = gray;
         if (gray > maxVal) maxVal = gray;
       }
 
       const range = maxVal - minVal || 1;
-      for (let i = 0; i < d.length; i += 4) {
-        const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
-        let stretched = Math.round(((gray - minVal) / range) * 255);
-        stretched = stretched < 140 ? Math.max(0, stretched - 30) : Math.min(255, stretched + 30);
 
-        d[i] = stretched;
-        d[i + 1] = stretched;
-        d[i + 2] = stretched;
+      // 3. 선명화(Sharpening) 컨볼루션 필터 적용 (3x3 Laplacian: 8pt 얇은 글씨 획 복원)
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const idx = y * w + x;
+          const pixelIdx = idx * 4;
+
+          const center = grayData[idx];
+          const top = grayData[(y - 1) * w + x];
+          const bottom = grayData[(y + 1) * w + x];
+          const left = grayData[y * w + (x - 1)];
+          const right = grayData[y * w + (x + 1)];
+
+          const sharp = (5 * center) - (top + bottom + left + right);
+          let stretched = Math.round(((sharp - minVal) / range) * 255);
+          stretched = stretched < 135 ? Math.max(0, stretched - 35) : Math.min(255, stretched + 35);
+
+          d[pixelIdx] = stretched;
+          d[pixelIdx + 1] = stretched;
+          d[pixelIdx + 2] = stretched;
+        }
       }
 
       ctx.putImageData(imgData, 0, 0);
       canvas.toBlob((blob) => {
-        resolve({ blob: blob || file, dataUrl: canvas.toDataURL('image/jpeg', 0.9) });
-      }, 'image/png');
+        resolve({ blob: blob || file, dataUrl: canvas.toDataURL('image/jpeg', 0.92) });
+      }, 'image/jpeg');
     };
     img.src = URL.createObjectURL(file);
   });
@@ -368,9 +415,9 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
       if (aiData.success && aiData.drugs && aiData.drugs.length > 0) {
         if (progressBar) progressBar.style.width = '100%';
         if (percentage) percentage.innerText = '100%';
-        if (statusText) statusText.innerText = 'AI 판독 완료!';
+        if (statusText) statusText.innerText = '처방전 분석 완료!';
 
-        await renderAiVisionResults(aiData.drugs, aiData.rawSummary, dataUrl);
+        await renderAiVisionResults(aiData.drugs, aiData.rawSummary, dataUrl, aiData.totalPrescribedCount, aiData.unrecognizedCount);
         return;
       }
     }
@@ -423,7 +470,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
 
     await worker.terminate();
 
-    if (statusText) statusText.innerText = '연속 슬라이딩 윈도우 의약품 대조 중...';
+    if (statusText) statusText.innerText = '의약품 DB 정밀 대조 및 오타 보정 중...';
     if (progressBar) progressBar.style.width = '100%';
     if (percentage) percentage.innerText = '100%';
 
@@ -439,11 +486,14 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
   }
 }
 
-// AI Vision 결과 렌더링
-async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
+// AI Vision 결과 렌더링 (미판독 약물 알림 포함)
+async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribedCount, unrecognizedCount) {
   const resultArea = document.getElementById('image-result-area');
   const statusArea = document.getElementById('image-status-area');
   if (!resultArea) return;
+
+  const totalCount = totalPrescribedCount || drugs.length;
+  const unrecCount = typeof unrecognizedCount === 'number' ? unrecognizedCount : Math.max(0, totalCount - drugs.length);
 
   if (statusArea) {
     statusArea.innerHTML = `
@@ -452,9 +502,9 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
           <img src="${imageUrl}" alt="첨부 처방전" class="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0" />
           <div>
             <div class="flex items-center gap-1.5 text-xs font-bold text-[#6340cd]">
-              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 99.9% 초정밀 AI 판독 완료
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 처방전 의약품 분석 완료 (${drugs.length}종 식별)
             </div>
-            <p class="text-xs text-slate-500">처방전에 기재된 ${drugs.length}종의 의약품이 완벽하게 식별되었습니다.</p>
+            <p class="text-xs text-slate-500">처방전의 의약품 및 성분 대조가 완료되었습니다.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -478,7 +528,7 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
     const drugName = d.name || '';
     const ingrName = d.ingredient || '';
 
-    // 1. 등록된 복합제/인기 처방약 DB 매칭 우선
+    // 1. 등록된 복합제/인기 처방약 DB 매칭 우선 (퍼지 오타 매칭 포함)
     const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.find(cd => 
       drugName.includes(cd.brandName) || 
       cd.brandName.includes(drugName) ||
@@ -580,13 +630,30 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
 
   const summaryBanner = renderSummaryBanner(prohibitedCount, cautionCount, safeCount, drugs.length);
 
+  // 미판독 약물 알림 문구 박스
+  const unparsedWarningHtml = unrecCount > 0 ? `
+    <div class="bg-amber-50 border-2 border-amber-400 rounded-2xl p-5 text-center space-y-2 shadow-sm mb-4">
+      <div class="flex items-center justify-center gap-2 text-amber-900 font-extrabold text-sm sm:text-base">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i>
+        <span>${totalCount}종류 중 ${unrecCount}종류의 약은 이미지 판독이 어렵습니다.</span>
+      </div>
+      <p class="text-xs sm:text-sm text-amber-900 font-bold">
+        약 이름/성분명 검색이 필요합니다.
+      </p>
+      <button onclick="switchTab('text')" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-[#6340cd] text-white text-xs font-bold rounded-xl hover:bg-[#502bb8] transition shadow-sm">
+        <i data-lucide="search" class="w-4 h-4"></i> 약 이름 / 성분명 검색하러 가기
+      </button>
+    </div>
+  ` : '';
+
   resultArea.innerHTML = `
     ${summaryBanner}
+    ${unparsedWarningHtml}
     <div class="space-y-3">${cardsHtml}</div>
     ${rawSummary ? `
       <details class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm text-xs group">
         <summary class="font-bold text-slate-700 cursor-pointer flex items-center justify-between list-none">
-          <span class="flex items-center gap-1.5"><i data-lucide="sparkles" class="w-4 h-4 text-[#6340cd]"></i> AI 분석 요약 보기</span>
+          <span class="flex items-center gap-1.5"><i data-lucide="file-text" class="w-4 h-4 text-[#6340cd]"></i> 추출 의약품 요약 정보</span>
           <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform"></i>
         </summary>
         <div class="mt-3 pt-3 border-t border-slate-100 text-slate-600 bg-slate-50 p-3 rounded-xl whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
@@ -598,6 +665,8 @@ ${rawSummary}
 
   if (window.lucide) lucide.createIcons();
 }
+
+
 
 function renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalCount) {
   if (prohibitedCount > 0) {
@@ -848,8 +917,41 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     else safeCount++;
   });
 
+  // 처방전 상의 총 의약품 행 수 추정 (헤더 제외 의약품/용법 토큰 포함 행 카운트)
+  let totalEstimatedRows = 0;
+  lines.forEach(l => {
+    if (l.includes('환자정보') || l.includes('교부번호') || l.includes('병원정보') || 
+        l.includes('조제약사') || l.includes('조제일자') || l.includes('발행일') || 
+        l.includes('약품사진') || l.includes('약품명') || l.includes('복약안내') ||
+        l.includes('의원') || l.includes('병원') || l.includes('약국')) {
+      return;
+    }
+    if (/[가-힣A-Za-z0-9]{2,}(?:정|캡슐|서방정|시럽|과립|액|산|환|포|매|ml|mg|g)/.test(l) ||
+        /\b\d+\s*(?:정|캡슐|포|매|환|ml|mg)\b/.test(l)) {
+      totalEstimatedRows++;
+    }
+  });
+
   const totalDetected = finalIngredients.length + detectedCommercials.length + apiFetchedDrugs.length;
+  const finalTotalRows = Math.max(totalDetected, totalEstimatedRows);
+  const unparsedCount = Math.max(0, finalTotalRows - totalDetected);
   const summaryBanner = renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalDetected);
+
+  // 미판독 약물 경고 문구 박스
+  const unparsedWarningHtml = unparsedCount > 0 ? `
+    <div class="bg-amber-50 border-2 border-amber-400 rounded-2xl p-5 text-center space-y-2 shadow-sm mb-4">
+      <div class="flex items-center justify-center gap-2 text-amber-900 font-extrabold text-sm sm:text-base">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i>
+        <span>${finalTotalRows}종류 중 ${unparsedCount}종류의 약은 이미지 판독이 어렵습니다.</span>
+      </div>
+      <p class="text-xs sm:text-sm text-amber-900 font-bold">
+        약 이름/성분명 검색이 필요합니다.
+      </p>
+      <button onclick="switchTab('text')" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-[#6340cd] text-white text-xs font-bold rounded-xl hover:bg-[#502bb8] transition shadow-sm">
+        <i data-lucide="search" class="w-4 h-4"></i> 약 이름 / 성분명 검색하러 가기
+      </button>
+    </div>
+  ` : '';
 
   let cardsHtml = '';
   finalIngredients.forEach(ing => { cardsHtml += renderIngredientCard(ing); });
@@ -942,6 +1044,7 @@ ${rawText || '추출된 텍스트가 없습니다.'}
 
   resultArea.innerHTML = `
     ${summaryBanner}
+    ${unparsedWarningHtml}
     ${cardsHtml ? `<div class="space-y-3">${cardsHtml}</div>` : ''}
     ${rawTextAccordion}
   `;
@@ -1524,44 +1627,6 @@ function toggleAllIngredientsModal() {
     modal.classList.toggle('hidden');
     if (window.lucide) lucide.createIcons();
   }
-}
-
-function toggleAiModal() {
-  const modal = document.getElementById('ai-modal');
-  if (modal) {
-    modal.classList.toggle('hidden');
-    loadAiKeyInput();
-    if (window.lucide) lucide.createIcons();
-  }
-}
-
-function loadAiKeyInput() {
-  const input = document.getElementById('gemini-key-input');
-  if (input) {
-    input.value = localStorage.getItem('gemini_api_key') || '';
-  }
-}
-
-function saveAiKey() {
-  const input = document.getElementById('gemini-key-input');
-  if (input) {
-    const key = input.value.trim();
-    if (key) {
-      localStorage.setItem('gemini_api_key', key);
-      alert('✨ Gemini AI Vision 키가 저장되었습니다! 이제 처방전 사진 첨부 시 99.9% 초정밀 AI가 자동으로 분석합니다.');
-    } else {
-      localStorage.removeItem('gemini_api_key');
-      alert('AI 키가 제거되었습니다. 고화질 전처리 브라우저 OCR 모드로 전환됩니다.');
-    }
-    toggleAiModal();
-  }
-}
-
-function clearAiKey() {
-  localStorage.removeItem('gemini_api_key');
-  const input = document.getElementById('gemini-key-input');
-  if (input) input.value = '';
-  alert('AI 키가 초기화되었습니다.');
 }
 
 document.addEventListener('DOMContentLoaded', init);
