@@ -97,68 +97,53 @@ function handleSearch(query) {
   }, 400);
 }
 
-// 식약처 Open API 실시간 호출 (의약품 제품 허가정보 & e약은요 통합 지원)
+// 식약처 Open API 실시간 호출 (의약품 제품 허가정보 Service07 실시간 연동)
 async function fetchFromMfdsApi(query) {
   const resultArea = document.getElementById('result-area');
   try {
     const serviceKey = API_SERVICE_KEY;
-    
     let items = [];
-    let isPermitApi = false;
 
-    // 1. 서버리스 API 프록시 시도 (Vercel 등 서버 환경)
+    // 1. Vercel 서버리스 API 프록시 호출
     try {
       const serverRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       if (serverRes.ok) {
         const serverData = await serverRes.json();
         if (serverData.items && serverData.items.length > 0) {
           items = serverData.items;
-          isPermitApi = true;
         }
       }
     } catch (e) {
-      // 서버리스 미지원 환경(정적 호스팅)시 직접 API 시도
+      // 프록시 실패 시 직접 호출 시도
     }
 
-    // 2. 직접 API 호출 시도 (로컬/CORS 허용 환경)
+    // 2. 직접 API 호출 (로컬 등)
     if (items.length === 0) {
-      const endpoints = [
-        `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnDtlInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
-        `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
-        `https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList?serviceKey=${serviceKey}&itemName=${encodeURIComponent(query)}&type=json`
-      ];
-
-      for (const ep of endpoints) {
-        try {
-          const res = await fetch(ep);
-          if (!res.ok) continue;
+      const url = `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnInq07?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json&numOfRows=30`;
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
           const data = await res.json();
-          const found = data?.body?.items || [];
-          if (found.length > 0) {
-            items = found;
-            if (ep.includes('DrugPrdtPrmsnInfoService')) isPermitApi = true;
-            break;
-          }
-        } catch (e) {
-          // 다음 엔드포인트 시도
+          items = data?.body?.items || [];
         }
-      }
+      } catch (e) {}
     }
 
     if (items.length > 0) {
-      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-teal-600"></i> 식약처 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
+      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-teal-600"></i> 식약처 국가 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
       
       items.forEach(item => {
         const itemName = item.ITEM_NAME || item.itemName || '';
         const entpName = item.ENTP_NAME || item.entpName || '';
-        const mainIngr = item.MAIN_ITEM_INGR || item.efcyQesitm || '';
-        const etcOtc = item.ETC_OTC_CODE || (isPermitApi ? '전문의약품' : '일반의약품');
+        const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || item.efcyQesitm || '';
+        const spclty = item.SPCLTY_PBLC || '의약품';
+        const prductType = item.PRDUCT_TYPE ? ` · ${item.PRDUCT_TYPE.replace(/^\[\d+\]/, '')}` : '';
         
         // 린다이어트 170종 성분과 자동 대조
         const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
           itemName.includes(rule.koreanName) || 
-          mainIngr.includes(rule.koreanName) ||
-          (rule.englishName && (itemName.toLowerCase().includes(rule.englishName.toLowerCase()) || mainIngr.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
+          ingrName.includes(rule.koreanName) ||
+          (rule.englishName && (itemName.toLowerCase().includes(rule.englishName.toLowerCase()) || ingrName.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
           (rule.commonBrands || []).some(b => itemName.includes(b))
         );
 
@@ -185,16 +170,16 @@ async function fetchFromMfdsApi(query) {
               <div>
                 <div class="flex items-center gap-2">
                   <h2 class="text-xl font-extrabold text-slate-900">${itemName}</h2>
-                  <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">${etcOtc}</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">${spclty}${prductType}</span>
                 </div>
                 <p class="text-xs text-slate-400 mt-0.5">${entpName} · 식약처 국가허가의약품</p>
               </div>
               <div>${statusHtml}</div>
             </div>
 
-            ${mainIngr ? `
-              <div class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg">
-                <span class="font-semibold text-slate-700">허가 성분/효능:</span> ${mainIngr.slice(0, 120)}
+            ${ingrName ? `
+              <div class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg flex items-center gap-1.5">
+                <span class="font-bold text-slate-700">주성분:</span> <span>${ingrName}</span>
               </div>
             ` : ''}
 
@@ -205,7 +190,7 @@ async function fetchFromMfdsApi(query) {
               </div>
             ` : `
               <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs leading-relaxed">
-                현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 약물입니다.
+                현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
               </div>
             `}
           </div>
