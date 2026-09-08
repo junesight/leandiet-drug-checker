@@ -97,32 +97,53 @@ function handleSearch(query) {
   }, 400);
 }
 
-// 식약처 Open API 실시간 호출
+// 식약처 Open API 실시간 호출 (의약품 제품 허가정보 & e약은요 통합 지원)
 async function fetchFromMfdsApi(query) {
   const resultArea = document.getElementById('result-area');
   try {
     const serviceKey = API_SERVICE_KEY;
-    const url = `https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList?serviceKey=${serviceKey}&itemName=${encodeURIComponent(query)}&type=json`;
+    
+    // 1. 식품의약품안전처_의약품 제품 허가정보 및 e약은요 엔드포인트 후보
+    const endpoints = [
+      `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnDtlInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
+      `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
+      `https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList?serviceKey=${serviceKey}&itemName=${encodeURIComponent(query)}&type=json`
+    ];
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('API 호출 상태 이상');
-    const data = await res.json();
+    let items = [];
+    let isPermitApi = false;
 
-    const items = data?.body?.items || [];
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const found = data?.body?.items || [];
+        if (found.length > 0) {
+          items = found;
+          if (ep.includes('DrugPrdtPrmsnInfoService')) isPermitApi = true;
+          break;
+        }
+      } catch (e) {
+        // 다음 엔드포인트 시도
+      }
+    }
+
     if (items.length > 0) {
-      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-teal-600"></i> 식약처 공공데이터 실시간 조회 결과 (${items.length}건)</div>`;
+      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-teal-600"></i> 식약처 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
       
       items.forEach(item => {
-        // e약은요에서 주성분 또는 효능 추출
-        const itemName = item.itemName;
-        const entpName = item.entpName;
-        const efcyQesitm = item.efcyQesitm || '';
+        const itemName = item.ITEM_NAME || item.itemName || '';
+        const entpName = item.ENTP_NAME || item.entpName || '';
+        const mainIngr = item.MAIN_ITEM_INGR || item.efcyQesitm || '';
+        const etcOtc = item.ETC_OTC_CODE || (isPermitApi ? '전문의약품' : '일반의약품');
         
         // 린다이어트 170종 성분과 자동 대조
         const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
           itemName.includes(rule.koreanName) || 
-          efcyQesitm.includes(rule.koreanName) ||
-          (rule.englishName && itemName.toLowerCase().includes(rule.englishName.toLowerCase()))
+          mainIngr.includes(rule.koreanName) ||
+          (rule.englishName && (itemName.toLowerCase().includes(rule.englishName.toLowerCase()) || mainIngr.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
+          (rule.commonBrands || []).some(b => itemName.includes(b))
         );
 
         let status = 'SAFE';
@@ -146,11 +167,20 @@ async function fetchFromMfdsApi(query) {
           <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-3 mb-3">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div>
-                <h2 class="text-xl font-extrabold text-slate-900">${itemName}</h2>
-                <p class="text-xs text-slate-400">${entpName} · 식약처 e약은요 등록의약품</p>
+                <div class="flex items-center gap-2">
+                  <h2 class="text-xl font-extrabold text-slate-900">${itemName}</h2>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">${etcOtc}</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">${entpName} · 식약처 국가허가의약품</p>
               </div>
               <div>${statusHtml}</div>
             </div>
+
+            ${mainIngr ? `
+              <div class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg">
+                <span class="font-semibold text-slate-700">허가 성분/효능:</span> ${mainIngr.slice(0, 120)}
+              </div>
+            ` : ''}
 
             ${detectedRules.length > 0 ? `
               <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs leading-relaxed space-y-1.5">
@@ -158,8 +188,8 @@ async function fetchFromMfdsApi(query) {
                 ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
               </div>
             ` : `
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs leading-relaxed">
-                <strong>효능 및 설명:</strong> ${efcyQesitm.slice(0, 150)}...
+              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs leading-relaxed">
+                현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 약물입니다.
               </div>
             `}
           </div>
