@@ -243,24 +243,35 @@ function renderSearchingIndicator(query) {
   `;
 }
 
-// 초기 화면 안내
+// 초기 화면 안내 (가로 3단 상태 박스)
 function renderInitialGuide() {
   const resultArea = document.getElementById('result-area');
   if (!resultArea) return;
 
   resultArea.innerHTML = `
-    <div class="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
-      <i data-lucide="search" class="w-8 h-8 text-slate-300 mx-auto"></i>
-      <p class="text-sm font-semibold text-slate-700">약 이름이나 성분명을 검색창에 입력해 보세요</p>
-      <div class="flex flex-wrap justify-center gap-1.5 text-xs pt-2">
-        <button onclick="quickInput('탁센')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 탁센</button>
-        <button onclick="quickInput('타이레놀')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 타이레놀</button>
-        <button onclick="quickInput('뮤코펙트')" class="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-800 font-bold border border-emerald-200">🟢 뮤코펙트</button>
-        <button onclick="quickInput('판콜')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 판콜</button>
-        <button onclick="quickInput('소론도')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 소론도 (스테로이드)</button>
-        <button onclick="quickInput('스틸녹스')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 스틸녹스</button>
-        <button onclick="quickInput('씬지로이드')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 씬지로이드</button>
-        <button onclick="quickInput('케이캡')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 케이캡</button>
+    <div class="grid grid-cols-3 gap-2.5 sm:gap-3.5 pt-1">
+      <!-- 1. 초록색: 병용 가능 -->
+      <div class="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+        <div class="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+          <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm sm:text-base font-extrabold text-emerald-800">병용 가능</span>
+      </div>
+
+      <!-- 2. 노란색: 병용 주의 -->
+      <div class="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+        <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm sm:text-base font-extrabold text-amber-900">병용 주의</span>
+      </div>
+
+      <!-- 3. 빨간색: 병용 불가 -->
+      <div class="bg-red-50/90 border-2 border-red-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+        <div class="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+          <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm sm:text-base font-extrabold text-red-700">병용 불가</span>
       </div>
     </div>
   `;
