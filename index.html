@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>린다이어트 양약 복용 판정기</title>
+  <title>린다이어트 양약 병용 가능 여부 판독기</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -25,16 +25,15 @@
 
     <!-- 미니멀 헤더 -->
     <div class="text-center space-y-2">
-      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        린다이어트 한의원 전용
+      <div class="inline-flex items-center px-3.5 py-1 rounded-full bg-[#f3f0fc] text-[#6340cd] border border-[#e2d9f9] text-xs font-bold shadow-sm">
+        린다이어트 한의원을 위한
       </div>
-      <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">양약 복용 판정 검색</h1>
-      <p class="text-xs sm:text-sm text-slate-500">약 이름을 검색하면 성분과 다이어트 한약 병용 가능 여부를 즉시 알려드립니다.</p>
+      <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">양약 병용 가능 여부 판독기</h1>
+      <p class="text-xs sm:text-sm text-slate-500 font-medium">약 이름이나 성분명을 검색하면 다이어트 한약(마황제) 병용 가능 여부를 즉시 알려드립니다.</p>
     </div>
 
     <!-- 대형 깔끔한 검색창 (구글 스타일) -->
-    <div class="relative shadow-md rounded-2xl bg-white border border-slate-200 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-100 transition-all">
+    <div class="relative shadow-md rounded-2xl bg-white border border-slate-200 focus-within:border-[#6340cd] focus-within:ring-4 focus-within:ring-[#6340cd]/15 transition-all">
       <div class="flex items-center px-4 py-3.5">
         <i data-lucide="search" class="w-5 h-5 text-slate-400 mr-3 shrink-0"></i>
         <input
@@ -42,7 +41,7 @@
           type="text"
           autofocus
           autocomplete="off"
-          placeholder="약 이름(예: 탁센, 판콜, 타이레놀, 씬지로이드, 콘서타)을 입력하세요"
+          placeholder="약 이름이나 성분명을 입력하세요."
           class="w-full text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent font-medium"
           oninput="handleSearch(this.value)"
         />

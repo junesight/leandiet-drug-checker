@@ -138,7 +138,7 @@ async function fetchFromMfdsApi(query) {
     }
 
     if (items.length > 0) {
-      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-teal-600"></i> 식약처 국가 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
+      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-[#6340cd]"></i> 식약처 국가 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
       
       items.forEach(item => {
         const itemName = item.ITEM_NAME || item.itemName || '';
@@ -236,11 +236,35 @@ function renderSearchingIndicator(query) {
 
   resultArea.innerHTML = `
     <div class="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
-      <div class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <div class="w-8 h-8 border-4 border-[#6340cd] border-t-transparent rounded-full animate-spin mx-auto"></div>
       <p class="text-sm font-bold text-slate-800">'${query}' 식약처 공공데이터 실시간 검색 중...</p>
       <p class="text-xs text-slate-400">식품의약품안전처 국가 의약품 DB에서 유효성분을 조회하고 있습니다.</p>
     </div>
   `;
+}
+
+// 초기 화면 안내
+function renderInitialGuide() {
+  const resultArea = document.getElementById('result-area');
+  if (!resultArea) return;
+
+  resultArea.innerHTML = `
+    <div class="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
+      <i data-lucide="search" class="w-8 h-8 text-slate-300 mx-auto"></i>
+      <p class="text-sm font-semibold text-slate-700">약 이름이나 성분명을 검색창에 입력해 보세요</p>
+      <div class="flex flex-wrap justify-center gap-1.5 text-xs pt-2">
+        <button onclick="quickInput('탁센')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 탁센</button>
+        <button onclick="quickInput('타이레놀')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 타이레놀</button>
+        <button onclick="quickInput('뮤코펙트')" class="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-800 font-bold border border-emerald-200">🟢 뮤코펙트</button>
+        <button onclick="quickInput('판콜')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 판콜</button>
+        <button onclick="quickInput('소론도')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 소론도 (스테로이드)</button>
+        <button onclick="quickInput('스틸녹스')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 스틸녹스</button>
+        <button onclick="quickInput('씬지로이드')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 씬지로이드</button>
+        <button onclick="quickInput('케이캡')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 케이캡</button>
+      </div>
+    </div>
+  `;
+  if (window.lucide) lucide.createIcons();
 }
 
 // 시판 의약품 카드 렌더링
@@ -392,30 +416,6 @@ function renderIngredientCard(ing) {
       </div>
     </div>
   `;
-}
-
-// 초기 화면 안내
-function renderInitialGuide() {
-  const resultArea = document.getElementById('result-area');
-  if (!resultArea) return;
-
-  resultArea.innerHTML = `
-    <div class="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3 shadow-sm">
-      <i data-lucide="search" class="w-8 h-8 text-slate-300 mx-auto"></i>
-      <p class="text-sm font-semibold text-slate-700">약 이름을 검색창에 입력해 보세요</p>
-      <div class="flex flex-wrap justify-center gap-1.5 text-xs pt-2">
-        <button onclick="quickInput('탁센')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 탁센</button>
-        <button onclick="quickInput('타이레놀')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 타이레놀</button>
-        <button onclick="quickInput('뮤코펙트')" class="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-emerald-800 font-bold border border-emerald-200">🟢 뮤코펙트</button>
-        <button onclick="quickInput('판콜')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 판콜</button>
-        <button onclick="quickInput('소론도')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 소론도 (스테로이드)</button>
-        <button onclick="quickInput('스틸녹스')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 스틸녹스</button>
-        <button onclick="quickInput('씬지로이드')" class="px-3 py-1 bg-red-50 hover:bg-red-100 rounded-lg text-red-700 font-bold border border-red-200">🔴 씬지로이드</button>
-        <button onclick="quickInput('케이캡')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-800 font-bold border border-amber-200">🟡 케이캡</button>
-      </div>
-    </div>
-  `;
-  if (window.lucide) lucide.createIcons();
 }
 
 function quickInput(val) {
