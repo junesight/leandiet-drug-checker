@@ -614,8 +614,8 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribe
         ` : ''}
 
         ${detectedRules.length > 0 ? `
-          <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
-            <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+          <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : (status === 'CAUTION' ? 'bg-amber-50 border border-amber-300 text-amber-950' : 'bg-emerald-50 border border-emerald-200 text-emerald-950')} text-xs sm:text-sm leading-relaxed space-y-1.5">
+            <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : (status === 'CAUTION' ? 'text-amber-800' : 'text-emerald-800')}">연구진 검토 소견:</strong>
             ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
           </div>
         ` : `
@@ -1013,8 +1013,8 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
           ${prductType ? `<span class="text-slate-500">${prductType}</span>` : ''}
         </div>
         ${detectedRules.length > 0 ? `
-          <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
-            <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+          <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : (status === 'CAUTION' ? 'bg-amber-50 border border-amber-300 text-amber-950' : 'bg-emerald-50 border border-emerald-200 text-emerald-950')} text-xs sm:text-sm leading-relaxed space-y-1.5">
+            <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : (status === 'CAUTION' ? 'text-amber-800' : 'text-emerald-800')}">연구진 검토 소견:</strong>
             ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
           </div>
         ` : `
@@ -1374,8 +1374,8 @@ async function fetchFromMfdsApi(query) {
               ${prductType ? `<span class="text-slate-500">${prductType}</span>` : ''}
             </div>
             ${detectedRules.length > 0 ? `
-              <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
-                <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+              <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : (status === 'CAUTION' ? 'bg-amber-50 border border-amber-300 text-amber-950' : 'bg-emerald-50 border border-emerald-200 text-emerald-950')} text-xs sm:text-sm leading-relaxed space-y-1.5">
+                <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : (status === 'CAUTION' ? 'text-amber-800' : 'text-emerald-800')}">연구진 검토 소견:</strong>
                 ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
               </div>
             ` : `
@@ -1524,8 +1524,8 @@ function renderCommercialCard(drug) {
       </div>
 
       ${opinions.length > 0 ? `
-        <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
-          <strong class="font-extrabold block text-sm sm:text-base ${isProhibited ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+        <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border border-red-200 text-red-950' : (isCaution ? 'bg-amber-50 border border-amber-300 text-amber-950' : 'bg-emerald-50 border border-emerald-200 text-emerald-950')} text-xs sm:text-sm leading-relaxed space-y-1.5">
+          <strong class="font-extrabold block text-sm sm:text-base ${isProhibited ? 'text-red-700' : (isCaution ? 'text-amber-800' : 'text-emerald-800')}">연구진 검토 소견:</strong>
           ${opinions.map(op => `<p>• <strong>[${op.name}]</strong> ${op.text}</p>`).join('')}
         </div>
       ` : `
