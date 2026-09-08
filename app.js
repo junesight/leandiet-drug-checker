@@ -1665,12 +1665,14 @@ function renderAllModalList() {
   const container = document.getElementById('modal-list');
   if (!container) return;
 
-  container.innerHTML = ALL_DRUG_INGREDIENTS.map((ing, idx) => `
+  const targetList = ALL_DRUG_INGREDIENTS.filter(ing => ing.status === 'PROHIBITED' || ing.status === 'CAUTION');
+
+  container.innerHTML = targetList.map((ing, idx) => `
     <div class="py-2.5">
       <div class="flex items-center justify-between font-bold text-slate-900">
         <span>${idx + 1}. ${ing.koreanName} (${ing.englishName || '-'})</span>
-        <span class="text-[11px] px-2 py-0.5 rounded font-extrabold ${ing.status === 'PROHIBITED' ? 'bg-red-100 text-red-700 border border-red-300' : (ing.status === 'CAUTION' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300')}">
-          ${ing.status === 'PROHIBITED' ? '🔴 복용불가' : (ing.status === 'CAUTION' ? '🟡 주의필요' : '🟢 복용가능')}
+        <span class="text-[11px] px-2 py-0.5 rounded font-extrabold ${ing.status === 'PROHIBITED' ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}">
+          ${ing.status === 'PROHIBITED' ? '🔴 복용불가' : '🟡 주의필요'}
         </span>
       </div>
       <p class="text-slate-600 mt-1 leading-relaxed">${ing.opinion}</p>
