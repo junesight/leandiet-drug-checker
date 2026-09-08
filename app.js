@@ -1154,41 +1154,48 @@ function handleSearch(query) {
 
   const isPureChosung = /^[ㄱ-ㅎ]+$/.test(query);
 
-  const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
-    const kor = ing.koreanName.toLowerCase();
-    const eng = (ing.englishName || '').toLowerCase();
-    const syns = (ing.synonyms || []).map(s => s.toLowerCase());
-    const brands = (ing.commonBrands || []).map(b => b.toLowerCase());
-    if (!isPureChosung) {
-      return kor.includes(query) || eng.includes(query) ||
-             syns.some(s => s.includes(query) || query.includes(s)) ||
-             brands.some(b => b.includes(query) || query.includes(b)) ||
-             stringSimilarity(query, kor) >= 0.75;
-    }
-    return getChosung(kor).includes(query) || syns.some(s => getChosung(s).includes(query));
-  });
-
-  if (matchedIngredients.length > 0) {
-    let html = '';
-    matchedIngredients.forEach(ing => {
-      html += renderIngredientCard(ing);
-    });
-    resultArea.innerHTML = html;
-    if (window.lucide) lucide.createIcons();
-    return;
-  }
-
+  // 1. 상표명(처방명/약품명) 매칭 검사 (POPULAR_COMMERCIAL_DRUGS)
   const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.filter(drug => {
     const brand = drug.brandName.toLowerCase();
     const comp = (drug.company || '').toLowerCase();
     if (!isPureChosung) {
-      return brand.includes(query) || comp.includes(query) || stringSimilarity(query, brand) >= 0.75;
+      return brand.includes(query) || comp.includes(query) || (query.length >= 2 && stringSimilarity(query, brand) >= 0.75);
     }
     return getChosung(brand).includes(query);
   });
 
-  if (matchedCommercial.length > 0) {
-    let html = '';
+  // 2. 순수 성분명 매칭 검사 (ALL_DRUG_INGREDIENTS의 koreanName 및 englishName 중심)
+  const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
+    const kor = ing.koreanName.toLowerCase();
+    const eng = (ing.englishName || '').toLowerCase();
+    if (!isPureChosung) {
+      return kor === query || kor.startsWith(query) || (query.length >= 2 && kor.includes(query)) ||
+             eng === query || eng.startsWith(query) ||
+             (query.length >= 3 && stringSimilarity(query, kor) >= 0.82);
+    }
+    return getChosung(kor).startsWith(query) || getChosung(kor) === query;
+  });
+
+  // 검색어가 순수 성분명 자체와 정확히 일치하는지 확인
+  const isExactIngredient = matchedIngredients.some(ing => 
+    ing.koreanName.toLowerCase() === query || (ing.englishName && ing.englishName.toLowerCase() === query)
+  );
+
+  // 상표명으로 등록되어 있는 대표 브랜드인지 확인 (예: 탁센, 타이레놀 등)
+  const isKnownBrand = ALL_DRUG_INGREDIENTS.some(ing => 
+    (ing.commonBrands || []).some(b => b.toLowerCase().includes(query))
+  );
+
+  // 약 이름 우선 조건:
+  // - 상표명 매칭 목록이 존재하며 정확한 성분명 검색이 아닌 경우
+  // - 또는 검색어가 상표명으로 시작하는 제품이 있는 경우 (예: "탁센" -> "탁센연질캡슐")
+  const isDrugNamePriority = (matchedCommercial.length > 0 && !isExactIngredient) ||
+                             (matchedCommercial.length > 0 && matchedCommercial.some(d => d.brandName.toLowerCase().startsWith(query))) ||
+                             (isKnownBrand && !isExactIngredient);
+
+  // [우선순위 1] 약 이름 검색일 때 -> 약 이름(처방명) 카드 목록 우선 노출
+  if (isDrugNamePriority && matchedCommercial.length > 0) {
+    let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><i data-lucide="pill" class="w-3.5 h-3.5 text-[#6340cd]"></i> 의약품 처방명 검색 결과 (${matchedCommercial.length}건)</div>`;
     matchedCommercial.forEach(drug => {
       html += renderCommercialCard(drug);
     });
@@ -1197,11 +1204,57 @@ function handleSearch(query) {
     return;
   }
 
+  // [우선순위 2] 성분명 검색일 때 -> 성분명 카드 최우선 노출 + 해당 성분 함유 대표약 연계
+  if (matchedIngredients.length > 0) {
+    let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><i data-lucide="flask-conical" class="w-3.5 h-3.5 text-[#6340cd]"></i> 성분별 병용 안전 판정 결과 (${matchedIngredients.length}건)</div>`;
+    matchedIngredients.forEach(ing => {
+      html += renderIngredientCard(ing);
+
+      // 해당 성분을 함유한 대표 의약품 연계 표시
+      const relatedDrugs = POPULAR_COMMERCIAL_DRUGS.filter(drug => 
+        drug.ingredients.some(i => {
+          const rule = findIngredientRule(i.name);
+          return (rule && rule.id === ing.id) || i.name.toLowerCase().includes(ing.koreanName.toLowerCase()) || ing.koreanName.toLowerCase().includes(i.name.toLowerCase());
+        })
+      );
+
+      if (relatedDrugs.length > 0) {
+        html += `
+          <div class="mt-3 mb-6 p-4 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2.5 shadow-sm">
+            <div class="text-xs font-bold text-slate-700 flex items-center gap-1.5 pb-1 border-b border-slate-200/60">
+              <i data-lucide="package" class="w-4 h-4 text-[#6340cd]"></i>
+              '${ing.koreanName}' 성분이 포함된 대표 의약품 (${relatedDrugs.length}건)
+            </div>
+            <div class="space-y-2">
+              ${relatedDrugs.map(d => renderCommercialCard(d)).join('')}
+            </div>
+          </div>
+        `;
+      }
+    });
+
+    resultArea.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // [우선순위 3] 성분명 미매칭이지만 상표명 매칭이 있는 경우
+  if (matchedCommercial.length > 0) {
+    let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><i data-lucide="pill" class="w-3.5 h-3.5 text-[#6340cd]"></i> 의약품 처방명 검색 결과 (${matchedCommercial.length}건)</div>`;
+    matchedCommercial.forEach(drug => {
+      html += renderCommercialCard(drug);
+    });
+    resultArea.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // [우선순위 4] 로컬 DB 미등록 약품/성분 -> 식약처 국가 의약품 DB 실시간 연동
   renderSearchingIndicator(query);
 
   debounceTimer = setTimeout(() => {
     fetchFromMfdsApi(query);
-  }, 400);
+  }, 350);
 }
 
 // 다중 약물 일괄 검색 처리 (카톡/문자/처방내역 복사 붙여넣기 대응)
@@ -1224,15 +1277,7 @@ async function handleBatchSearch(tokens) {
     const q = token.trim().toLowerCase();
     if (!q) continue;
 
-    const matchedIng = findIngredientRule(q);
-
-    if (matchedIng) {
-      if (!detectedIngredients.some(i => i.id === matchedIng.id)) {
-        detectedIngredients.push(matchedIng);
-      }
-      continue;
-    }
-
+    // 상표명 우선 검사
     const matchedComm = POPULAR_COMMERCIAL_DRUGS.find(d => 
       d.brandName.toLowerCase() === q || d.brandName.toLowerCase().includes(q) || stringSimilarity(q, d.brandName.toLowerCase()) >= 0.75
     );
@@ -1240,6 +1285,15 @@ async function handleBatchSearch(tokens) {
     if (matchedComm) {
       if (!detectedCommercials.some(d => d.id === matchedComm.id)) {
         detectedCommercials.push(matchedComm);
+      }
+      continue;
+    }
+
+    // 순수 성분명 검사
+    const matchedIng = findIngredientRule(q);
+    if (matchedIng) {
+      if (!detectedIngredients.some(i => i.id === matchedIng.id)) {
+        detectedIngredients.push(matchedIng);
       }
       continue;
     }
@@ -1351,6 +1405,41 @@ async function handleBatchSearch(tokens) {
   if (window.lucide) lucide.createIcons();
 }
 
+// 성분명 표기 한글/영문 최적화 헬퍼 (식약처 영문 원료명 및 제품명 괄호 성분명 대응)
+function resolveIngredientDisplayName(rawIngr, rawItemName = '') {
+  if (!rawIngr && !rawItemName) return '성분 정보 확인';
+
+  // 1. 제품명 내 괄호 성분명 추출 (예: '탁센연질캡슐(나프록센)' -> '나프록센')
+  const parenMatch = (rawItemName || '').match(/\(([^)]+)\)/);
+  let parenCandidate = '';
+  if (parenMatch && parenMatch[1]) {
+    const candidate = parenMatch[1].trim();
+    if (!candidate.includes('수출') && !candidate.includes('군납') && candidate.length <= 25) {
+      parenCandidate = candidate;
+    }
+  }
+
+  // 2. rawIngr 성분 분해 및 한글 매핑 (예: 'Naproxen', 'Ibuprofen/Pamabrom')
+  const ingrText = rawIngr || parenCandidate || '';
+  if (ingrText) {
+    const parts = ingrText.split(/[\/\,\+]/).map(p => p.trim()).filter(Boolean);
+    const resolvedParts = parts.map(part => {
+      const rule = ALL_DRUG_INGREDIENTS.find(r => 
+        (r.englishName && r.englishName.toLowerCase() === part.toLowerCase()) ||
+        r.koreanName.toLowerCase() === part.toLowerCase() ||
+        (r.synonyms && r.synonyms.some(s => s.toLowerCase() === part.toLowerCase()))
+      );
+      if (rule) {
+        return `${rule.koreanName}${rule.englishName ? ` (${rule.englishName})` : ''}`;
+      }
+      return part;
+    });
+    return resolvedParts.join(', ');
+  }
+
+  return parenCandidate || '성분 정보 확인';
+}
+
 // 식약처 Open API 실시간 호출
 async function fetchFromMfdsApi(query) {
   const resultArea = document.getElementById('result-area');
@@ -1380,16 +1469,18 @@ async function fetchFromMfdsApi(query) {
     }
 
     if (items.length > 0) {
-      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1"><i data-lucide="cloud" class="w-3.5 h-3.5 text-[#6340cd]"></i> 식약처 국가 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
+      let html = `<div class="text-xs text-slate-400 mb-2 flex items-center gap-1.5"><i data-lucide="cloud" class="w-3.5 h-3.5 text-[#6340cd]"></i> 식약처 국가 의약품 제품 허가정보 실시간 조회 결과 (${items.length}건)</div>`;
       
       items.forEach(item => {
-        const itemName = item.ITEM_NAME || item.itemName || '';
+        const rawItemName = item.ITEM_NAME || item.itemName || '';
         const entpName = item.ENTP_NAME || item.entpName || '';
-        const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || item.efcyQesitm || '';
+        const rawIngr = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || item.efcyQesitm || '';
         const spclty = item.SPCLTY_PBLC || '의약품';
         const prductType = item.PRDUCT_TYPE ? ` · ${item.PRDUCT_TYPE.replace(/^\[\d+\]/, '')}` : '';
         
-        const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
+        const cleanTitle = rawItemName.replace(/\(.*?\)/g, '').trim() || rawItemName;
+        const displayIngr = resolveIngredientDisplayName(rawIngr, rawItemName);
+        const detectedRules = findMatchingRules(rawItemName, rawIngr, item.efcyQesitm || '');
 
         let status = 'SAFE';
         let statusHtml = '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>';
@@ -1413,7 +1504,8 @@ async function fetchFromMfdsApi(query) {
             <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
               <div class="space-y-1">
                 <div class="text-sm text-slate-600 font-medium">
-                  처방명 : <span class="text-base font-bold text-slate-900">${itemName}</span>
+                  처방명 : <span class="text-base font-bold text-slate-900">${cleanTitle}</span>
+                  ${cleanTitle !== rawItemName ? `<span class="text-xs text-slate-400 font-normal ml-1">(${rawItemName})</span>` : ''}
                 </div>
                 <div class="text-xs text-slate-500 font-medium">
                   제약회사 : <span class="text-slate-700">${entpName}</span>
@@ -1426,7 +1518,7 @@ async function fetchFromMfdsApi(query) {
             <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
               <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
               <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
-                ${ingrName || '성분 정보 확인'}
+                ${displayIngr}
               </div>
             </div>
             <div class="text-xs text-slate-500 font-medium flex items-center gap-1.5">
