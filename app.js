@@ -114,6 +114,91 @@ function findFuzzyMatchesInText(text, targetWord, threshold = 0.75) {
   return false;
 }
 
+// 개별 성분/약물명으로 금기/주의/안전 성분 마스터 규칙 탐색 (동의어, 영문명, 상표명, 퍼지매칭 100% 지원)
+function findIngredientRule(target) {
+  if (!target) return null;
+  const t = target.trim().toLowerCase();
+  if (!t) return null;
+
+  // 1. 일치 / 부분 포함 (koreanName, englishName)
+  for (const r of ALL_DRUG_INGREDIENTS) {
+    const k = r.koreanName.toLowerCase();
+    const e = (r.englishName || '').toLowerCase();
+    if (k === t || k.includes(t) || t.includes(k)) return r;
+    if (e && (e === t || e.includes(t) || t.includes(e))) return r;
+  }
+
+  // 2. 동의어(synonyms) 매칭 (예: 셀레콕시브, 쎄레콕시브, 플루티카손푸로에이트, 소론도, 메드롤 등)
+  for (const r of ALL_DRUG_INGREDIENTS) {
+    if (r.synonyms && r.synonyms.some(s => {
+      const sLow = s.toLowerCase();
+      return sLow === t || sLow.includes(t) || t.includes(sLow);
+    })) {
+      return r;
+    }
+  }
+
+  // 3. 대표 상표명(commonBrands) 매칭 (예: 렉시핀, 아세브론, 코푸, 코대원, 게보린, 판콜 등)
+  for (const r of ALL_DRUG_INGREDIENTS) {
+    if (r.commonBrands && r.commonBrands.some(b => {
+      const bLow = b.toLowerCase();
+      return bLow === t || bLow.includes(t) || t.includes(bLow);
+    })) {
+      return r;
+    }
+  }
+
+  // 4. 자모 단위 퍼지 유사도 (오타/표기 차이 보정)
+  let bestMatch = null;
+  let highestSim = 0.72;
+  for (const r of ALL_DRUG_INGREDIENTS) {
+    const k = r.koreanName.toLowerCase();
+    const sim = stringSimilarity(t, k);
+    if (sim > highestSim) {
+      highestSim = sim;
+      bestMatch = r;
+    }
+    if (r.synonyms) {
+      for (const s of r.synonyms) {
+        const sSim = stringSimilarity(t, s.toLowerCase());
+        if (sSim > highestSim) {
+          highestSim = sSim;
+          bestMatch = r;
+        }
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+// 처방명/성분명/효능 텍스트 전체에서 매칭되는 모든 금기/주의 규칙 다중 추출
+function findMatchingRules(itemName = '', ingrName = '', efcy = '') {
+  const target = `${itemName} ${ingrName} ${efcy}`.toLowerCase();
+  const matched = [];
+
+  for (const r of ALL_DRUG_INGREDIENTS) {
+    const k = r.koreanName.toLowerCase();
+    const e = (r.englishName || '').toLowerCase();
+    const syns = (r.synonyms || []).map(s => s.toLowerCase());
+    const brands = (r.commonBrands || []).map(b => b.toLowerCase());
+
+    const isMatch = (k && target.includes(k)) ||
+                    (e && target.includes(e)) ||
+                    syns.some(s => target.includes(s) || (s.length >= 3 && stringSimilarity(itemName.toLowerCase(), s) >= 0.75)) ||
+                    brands.some(b => target.includes(b) || (b.length >= 3 && stringSimilarity(itemName.toLowerCase(), b) >= 0.75)) ||
+                    (k.length >= 3 && stringSimilarity(itemName.toLowerCase(), k) >= 0.75);
+
+    if (isMatch) {
+      if (!matched.some(m => m.id === r.id)) {
+        matched.push(r);
+      }
+    }
+  }
+
+  return matched;
+}
+
 let debounceTimer = null;
 let currentTab = 'text';
 let currentPrescriptionFile = null;
@@ -544,25 +629,15 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribe
       commercialDesc = matchedCommercial.description || '';
       
       matchedCommercial.ingredients.forEach(ing => {
-        const rule = ALL_DRUG_INGREDIENTS.find(r => 
-          r.koreanName.includes(ing.name) || 
-          ing.name.includes(r.koreanName) ||
-          (r.englishName && ing.name.toLowerCase().includes(r.englishName.toLowerCase()))
-        );
-        if (rule && !detectedRules.some(dr => dr.koreanName === rule.koreanName)) {
+        const rule = findIngredientRule(ing.name);
+        if (rule && !detectedRules.some(dr => dr.id === rule.id)) {
           detectedRules.push(rule);
         }
       });
     }
 
     if (detectedRules.length === 0) {
-      detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-        drugName.includes(rule.koreanName) || 
-        (displayIngr && displayIngr.includes(rule.koreanName)) ||
-        (rule.englishName && (drugName.toLowerCase().includes(rule.englishName.toLowerCase()) || (displayIngr && displayIngr.toLowerCase().includes(rule.englishName.toLowerCase())))) ||
-        (rule.commonBrands || []).some(b => drugName.includes(b)) ||
-        stringSimilarity(drugName, rule.koreanName) >= 0.75
-      );
+      detectedRules = findMatchingRules(drugName, displayIngr);
     }
 
     let status = 'SAFE';
@@ -893,7 +968,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     let hasPro = false;
     let hasCau = false;
     d.ingredients.forEach(ing => {
-      const rule = ALL_DRUG_INGREDIENTS.find(r => r.koreanName.includes(ing.name) || ing.name.includes(r.koreanName));
+      const rule = findIngredientRule(ing.name);
       if (rule) {
         if (rule.status === 'PROHIBITED') hasPro = true;
         if (rule.status === 'CAUTION') hasCau = true;
@@ -907,11 +982,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   apiFetchedDrugs.forEach(item => {
     const itemName = item.ITEM_NAME || item.itemName || '';
     const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || '';
-    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-      itemName.includes(rule.koreanName) || 
-      ingrName.includes(rule.koreanName) ||
-      (rule.commonBrands || []).some(b => itemName.includes(b))
-    );
+    const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
     if (detectedRules.some(r => r.status === 'PROHIBITED')) prohibitedCount++;
     else if (detectedRules.some(r => r.status === 'CAUTION')) cautionCount++;
     else safeCount++;
@@ -963,12 +1034,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     const spclty = item.SPCLTY_PBLC || '의약품';
     const prductType = item.PRDUCT_TYPE ? ` · ${item.PRDUCT_TYPE.replace(/^\[\d+\]/, '')}` : '';
 
-    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-      itemName.includes(rule.koreanName) || 
-      ingrName.includes(rule.koreanName) ||
-      (rule.englishName && (itemName.toLowerCase().includes(rule.englishName.toLowerCase()) || ingrName.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
-      (rule.commonBrands || []).some(b => itemName.includes(b))
-    );
+    const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
 
     let status = 'SAFE';
     let statusHtml = '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>';
@@ -1091,10 +1157,15 @@ function handleSearch(query) {
   const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
     const kor = ing.koreanName.toLowerCase();
     const eng = (ing.englishName || '').toLowerCase();
+    const syns = (ing.synonyms || []).map(s => s.toLowerCase());
+    const brands = (ing.commonBrands || []).map(b => b.toLowerCase());
     if (!isPureChosung) {
-      return kor.includes(query) || eng.includes(query);
+      return kor.includes(query) || eng.includes(query) ||
+             syns.some(s => s.includes(query) || query.includes(s)) ||
+             brands.some(b => b.includes(query) || query.includes(b)) ||
+             stringSimilarity(query, kor) >= 0.75;
     }
-    return getChosung(kor).includes(query);
+    return getChosung(kor).includes(query) || syns.some(s => getChosung(s).includes(query));
   });
 
   if (matchedIngredients.length > 0) {
@@ -1111,7 +1182,7 @@ function handleSearch(query) {
     const brand = drug.brandName.toLowerCase();
     const comp = (drug.company || '').toLowerCase();
     if (!isPureChosung) {
-      return brand.includes(query) || comp.includes(query);
+      return brand.includes(query) || comp.includes(query) || stringSimilarity(query, brand) >= 0.75;
     }
     return getChosung(brand).includes(query);
   });
@@ -1153,11 +1224,7 @@ async function handleBatchSearch(tokens) {
     const q = token.trim().toLowerCase();
     if (!q) continue;
 
-    const matchedIng = ALL_DRUG_INGREDIENTS.find(i => 
-      i.koreanName.toLowerCase() === q || 
-      (i.englishName && i.englishName.toLowerCase() === q) ||
-      i.koreanName.toLowerCase().includes(q)
-    );
+    const matchedIng = findIngredientRule(q);
 
     if (matchedIng) {
       if (!detectedIngredients.some(i => i.id === matchedIng.id)) {
@@ -1167,7 +1234,7 @@ async function handleBatchSearch(tokens) {
     }
 
     const matchedComm = POPULAR_COMMERCIAL_DRUGS.find(d => 
-      d.brandName.toLowerCase() === q || d.brandName.toLowerCase().includes(q)
+      d.brandName.toLowerCase() === q || d.brandName.toLowerCase().includes(q) || stringSimilarity(q, d.brandName.toLowerCase()) >= 0.75
     );
 
     if (matchedComm) {
@@ -1210,7 +1277,7 @@ async function handleBatchSearch(tokens) {
     let hasPro = false;
     let hasCau = false;
     d.ingredients.forEach(ing => {
-      const rule = ALL_DRUG_INGREDIENTS.find(r => r.koreanName.includes(ing.name) || ing.name.includes(r.koreanName));
+      const rule = findIngredientRule(ing.name);
       if (rule) {
         if (rule.status === 'PROHIBITED') hasPro = true;
         if (rule.status === 'CAUTION') hasCau = true;
@@ -1224,9 +1291,7 @@ async function handleBatchSearch(tokens) {
   apiDrugs.forEach(item => {
     const itemName = item.ITEM_NAME || item.itemName || '';
     const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || '';
-    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-      itemName.includes(rule.koreanName) || ingrName.includes(rule.koreanName)
-    );
+    const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
     if (detectedRules.some(r => r.status === 'PROHIBITED')) prohibitedCount++;
     else if (detectedRules.some(r => r.status === 'CAUTION')) cautionCount++;
     else safeCount++;
@@ -1242,7 +1307,7 @@ async function handleBatchSearch(tokens) {
     const itemName = item.ITEM_NAME || item.itemName || '';
     const entpName = item.ENTP_NAME || item.entpName || '';
     const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || '';
-    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => itemName.includes(rule.koreanName) || ingrName.includes(rule.koreanName));
+    const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
     const hasPro = detectedRules.some(r => r.status === 'PROHIBITED');
     const hasCau = detectedRules.some(r => r.status === 'CAUTION');
     const statusHtml = hasPro 
@@ -1324,12 +1389,7 @@ async function fetchFromMfdsApi(query) {
         const spclty = item.SPCLTY_PBLC || '의약품';
         const prductType = item.PRDUCT_TYPE ? ` · ${item.PRDUCT_TYPE.replace(/^\[\d+\]/, '')}` : '';
         
-        const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-          itemName.includes(rule.koreanName) || 
-          ingrName.includes(rule.koreanName) ||
-          (rule.englishName && (itemName.toLowerCase().includes(rule.englishName.toLowerCase()) || ingrName.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
-          (rule.commonBrands || []).some(b => itemName.includes(b))
-        );
+        const detectedRules = findMatchingRules(itemName, ingrName, item.efcyQesitm || '');
 
         let status = 'SAFE';
         let statusHtml = '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>';
@@ -1449,10 +1509,7 @@ function renderCommercialCard(drug) {
   let opinions = [];
 
   const parsedIngredients = drug.ingredients.map(ing => {
-    const rule = ALL_DRUG_INGREDIENTS.find(r => 
-      r.koreanName.toLowerCase().includes(ing.name.toLowerCase()) || 
-      ing.name.toLowerCase().includes(r.koreanName.toLowerCase())
-    );
+    const rule = findIngredientRule(ing.name);
 
     if (rule) {
       if (rule.status === 'PROHIBITED') {
