@@ -923,6 +923,15 @@ function handleSearch(query) {
     return;
   }
 
+  // 다중 약물 검색 지원 (쉼표, 줄바꿈, 슬래시 등으로 여러 약물을 한 번에 입력한 경우)
+  if (query.includes(',') || query.includes('/') || query.includes('\n') || (query.includes(' ') && query.length > 10)) {
+    const rawTokens = query.split(/[\,\/\n\+]/).map(t => t.trim()).filter(Boolean);
+    if (rawTokens.length > 1) {
+      handleBatchSearch(rawTokens);
+      return;
+    }
+  }
+
   const isPureChosung = /^[ㄱ-ㅎ]+$/.test(query);
 
   const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
@@ -968,6 +977,159 @@ function handleSearch(query) {
   debounceTimer = setTimeout(() => {
     fetchFromMfdsApi(query);
   }, 400);
+}
+
+// 다중 약물 일괄 검색 처리 (카톡/문자/처방내역 복사 붙여넣기 대응)
+async function handleBatchSearch(tokens) {
+  const resultArea = document.getElementById('result-area');
+  if (!resultArea) return;
+
+  resultArea.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 border border-slate-200 text-center space-y-3 shadow-sm">
+      <div class="w-8 h-8 border-4 border-[#6340cd] border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p class="text-sm font-bold text-slate-800">입력된 ${tokens.length}종의 의약품을 일괄 분석하고 있습니다...</p>
+    </div>
+  `;
+
+  let detectedIngredients = [];
+  let detectedCommercials = [];
+  let notFoundQueries = [];
+
+  for (const token of tokens) {
+    const q = token.trim().toLowerCase();
+    if (!q) continue;
+
+    const matchedIng = ALL_DRUG_INGREDIENTS.find(i => 
+      i.koreanName.toLowerCase() === q || 
+      (i.englishName && i.englishName.toLowerCase() === q) ||
+      i.koreanName.toLowerCase().includes(q)
+    );
+
+    if (matchedIng) {
+      if (!detectedIngredients.some(i => i.id === matchedIng.id)) {
+        detectedIngredients.push(matchedIng);
+      }
+      continue;
+    }
+
+    const matchedComm = POPULAR_COMMERCIAL_DRUGS.find(d => 
+      d.brandName.toLowerCase() === q || d.brandName.toLowerCase().includes(q)
+    );
+
+    if (matchedComm) {
+      if (!detectedCommercials.some(d => d.id === matchedComm.id)) {
+        detectedCommercials.push(matchedComm);
+      }
+      continue;
+    }
+
+    notFoundQueries.push(token);
+  }
+
+  // 로컬 미검출 약품 식약처 API 추가 검색
+  let apiDrugs = [];
+  if (notFoundQueries.length > 0) {
+    for (const q of notFoundQueries.slice(0, 5)) {
+      try {
+        const serverRes = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (serverRes.ok) {
+          const serverData = await serverRes.json();
+          if (serverData.items && serverData.items.length > 0) {
+            apiDrugs.push(serverData.items[0]);
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  let prohibitedCount = 0;
+  let cautionCount = 0;
+  let safeCount = 0;
+
+  detectedIngredients.forEach(i => {
+    if (i.status === 'PROHIBITED') prohibitedCount++;
+    else if (i.status === 'CAUTION') cautionCount++;
+    else safeCount++;
+  });
+
+  detectedCommercials.forEach(d => {
+    let hasPro = false;
+    let hasCau = false;
+    d.ingredients.forEach(ing => {
+      const rule = ALL_DRUG_INGREDIENTS.find(r => r.koreanName.includes(ing.name) || ing.name.includes(r.koreanName));
+      if (rule) {
+        if (rule.status === 'PROHIBITED') hasPro = true;
+        if (rule.status === 'CAUTION') hasCau = true;
+      }
+    });
+    if (hasPro) prohibitedCount++;
+    else if (hasCau) cautionCount++;
+    else safeCount++;
+  });
+
+  apiDrugs.forEach(item => {
+    const itemName = item.ITEM_NAME || item.itemName || '';
+    const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || '';
+    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
+      itemName.includes(rule.koreanName) || ingrName.includes(rule.koreanName)
+    );
+    if (detectedRules.some(r => r.status === 'PROHIBITED')) prohibitedCount++;
+    else if (detectedRules.some(r => r.status === 'CAUTION')) cautionCount++;
+    else safeCount++;
+  });
+
+  const totalCount = detectedIngredients.length + detectedCommercials.length + apiDrugs.length;
+  const summaryBanner = renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalCount);
+
+  let cardsHtml = '';
+  detectedIngredients.forEach(ing => { cardsHtml += renderIngredientCard(ing); });
+  detectedCommercials.forEach(drug => { cardsHtml += renderCommercialCard(drug); });
+  apiDrugs.forEach(item => {
+    const itemName = item.ITEM_NAME || item.itemName || '';
+    const entpName = item.ENTP_NAME || item.entpName || '';
+    const ingrName = item.ITEM_INGR_NAME || item.MAIN_ITEM_INGR || '';
+    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => itemName.includes(rule.koreanName) || ingrName.includes(rule.koreanName));
+    const hasPro = detectedRules.some(r => r.status === 'PROHIBITED');
+    const hasCau = detectedRules.some(r => r.status === 'CAUTION');
+    const statusHtml = hasPro 
+      ? '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-red-100 text-red-700 border-2 border-red-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> 🔴 병용 복용 불가</span>'
+      : (hasCau 
+      ? '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-amber-100 text-amber-900 border-2 border-amber-400 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> 🟡 병용 주의 약물</span>'
+      : '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>');
+
+    cardsHtml += `
+      <div class="bg-white rounded-2xl p-5 border-2 ${hasPro ? 'border-red-300 bg-red-50/20' : (hasCau ? 'border-amber-300 bg-amber-50/30' : 'border-emerald-200')} shadow-sm space-y-3.5 mb-3">
+        <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+          <div class="space-y-1">
+            <div class="text-sm text-slate-600 font-medium">처방명 : <span class="text-base font-bold text-slate-900">${itemName}</span></div>
+            <div class="text-xs text-slate-500 font-medium">제약회사 : <span class="text-slate-700">${entpName}</span></div>
+          </div>
+          <div class="shrink-0 whitespace-nowrap">${statusHtml}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+          <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
+          <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">${ingrName || '성분 정보 확인'}</div>
+        </div>
+        ${detectedRules.length > 0 ? `
+          <div class="p-4 rounded-xl ${hasPro ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
+            <strong class="font-extrabold block text-sm sm:text-base ${hasPro ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+            ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
+          </div>
+        ` : `
+          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
+            <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
+            현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
+          </div>
+        `}
+      </div>
+    `;
+  });
+
+  resultArea.innerHTML = `
+    ${summaryBanner}
+    <div class="space-y-3">${cardsHtml}</div>
+  `;
+  if (window.lucide) lucide.createIcons();
 }
 
 // 식약처 Open API 실시간 호출
