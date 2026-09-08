@@ -75,9 +75,28 @@
         </div>
       </div>
 
-      <!-- 텍스트 검색 결과 영역 -->
+      <!-- 텍스트 검색 결과 영역 (기본 3색 상태 박스) -->
       <div id="result-area" class="space-y-4">
-        <!-- 초기 가로 3색 박스 또는 검색 결과가 렌더링됩니다 -->
+        <div class="grid grid-cols-3 gap-2.5 sm:gap-3.5 pt-1">
+          <div class="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-emerald-800">병용 가능</span>
+          </div>
+          <div class="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-amber-900">병용 주의</span>
+          </div>
+          <div class="bg-red-50/90 border-2 border-red-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+              <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-red-700">병용 불가</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -116,8 +135,29 @@
       <!-- 이미지 상태 및 프로그레스 표시 영역 -->
       <div id="image-status-area" class="hidden"></div>
 
-      <!-- 이미지 분석 결과 영역 -->
-      <div id="image-result-area" class="space-y-4"></div>
+      <!-- 이미지 분석 결과 영역 (기본 3색 상태 박스) -->
+      <div id="image-result-area" class="space-y-4">
+        <div class="grid grid-cols-3 gap-2.5 sm:gap-3.5 pt-1">
+          <div class="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-emerald-800">병용 가능</span>
+          </div>
+          <div class="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+              <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-amber-900">병용 주의</span>
+          </div>
+          <div class="bg-red-50/90 border-2 border-red-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-sm">
+            <div class="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+              <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+            </div>
+            <span class="text-sm sm:text-base font-extrabold text-red-700">병용 불가</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 & AI 설정 -->
