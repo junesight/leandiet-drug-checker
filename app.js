@@ -478,13 +478,42 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
     const drugName = d.name || '';
     const ingrName = d.ingredient || '';
 
-    const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
-      drugName.includes(rule.koreanName) || 
-      ingrName.includes(rule.koreanName) ||
-      (rule.englishName && (drugName.toLowerCase().includes(rule.englishName.toLowerCase()) || ingrName.toLowerCase().includes(rule.englishName.toLowerCase()))) ||
-      (rule.commonBrands || []).some(b => drugName.includes(b)) ||
-      stringSimilarity(drugName, rule.koreanName) >= 0.70
+    // 1. 등록된 복합제/인기 처방약 DB 매칭 우선
+    const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.find(cd => 
+      drugName.includes(cd.brandName) || 
+      cd.brandName.includes(drugName) ||
+      stringSimilarity(drugName, cd.brandName) >= 0.75
     );
+
+    let displayIngr = ingrName;
+    let detectedRules = [];
+    let commercialDesc = '';
+
+    if (matchedCommercial) {
+      displayIngr = matchedCommercial.ingredients.map(i => `${i.name} ${i.amount || ''}`.trim()).join(' · ');
+      commercialDesc = matchedCommercial.description || '';
+      
+      matchedCommercial.ingredients.forEach(ing => {
+        const rule = ALL_DRUG_INGREDIENTS.find(r => 
+          r.koreanName.includes(ing.name) || 
+          ing.name.includes(r.koreanName) ||
+          (r.englishName && ing.name.toLowerCase().includes(r.englishName.toLowerCase()))
+        );
+        if (rule && !detectedRules.some(dr => dr.koreanName === rule.koreanName)) {
+          detectedRules.push(rule);
+        }
+      });
+    }
+
+    if (detectedRules.length === 0) {
+      detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
+        drugName.includes(rule.koreanName) || 
+        (displayIngr && displayIngr.includes(rule.koreanName)) ||
+        (rule.englishName && (drugName.toLowerCase().includes(rule.englishName.toLowerCase()) || (displayIngr && displayIngr.toLowerCase().includes(rule.englishName.toLowerCase())))) ||
+        (rule.commonBrands || []).some(b => drugName.includes(b)) ||
+        stringSimilarity(drugName, rule.koreanName) >= 0.75
+      );
+    }
 
     let status = 'SAFE';
     let statusHtml = '<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>';
@@ -512,7 +541,7 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
         <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
           <div class="space-y-1">
             <div class="text-sm text-slate-600 font-medium">
-              처방명 : <span class="text-base font-bold text-slate-900">${drugName}</span>
+              처방명 : <span class="text-base font-bold text-slate-900">${matchedCommercial ? matchedCommercial.brandName : drugName}</span>
             </div>
             ${d.dosage ? `<div class="text-xs text-slate-500 font-medium">용법/용량 : <span class="text-slate-700">${d.dosage}</span></div>` : ''}
           </div>
@@ -522,11 +551,17 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
         </div>
 
         <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
-          <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
+          <div class="text-xs text-slate-500 font-semibold mb-0.5">주요 성분 :</div>
           <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
-            ${ingrName || (detectedRules.length > 0 ? detectedRules[0].koreanName : '유효성분')}
+            ${displayIngr || (detectedRules.length > 0 ? detectedRules.map(r => r.koreanName).join(', ') : '유효성분')}
           </div>
         </div>
+
+        ${commercialDesc ? `
+          <div class="text-xs text-slate-600 bg-[#f3f0fc]/50 p-2.5 rounded-lg border border-[#e2d9f9]">
+            💡 ${commercialDesc}
+          </div>
+        ` : ''}
 
         ${detectedRules.length > 0 ? `
           <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">

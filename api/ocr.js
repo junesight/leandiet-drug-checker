@@ -24,32 +24,30 @@ export default async function handler(req, res) {
     const defaultKey = Buffer.from('QVEuQWI4Uk42TDB1aEVnV2tSS1VPOVdoeTFzbVRlZUE2VVZ4Nm1VQkgtRjdtMzEtSWZDTEE=', 'base64').toString('utf-8');
     const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || defaultKey;
 
-    // Google Gemini 1.5 Flash Vision API 호출
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${effectiveApiKey}`;
+    // Google Gemini 3.6 Flash Vision API 호출 (최신 초정밀 모델)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${effectiveApiKey}`;
 
     const prompt = `
-당신은 한국 병원 처방전 및 약봉투 전문 판독 AI입니다.
-첨부된 처방전/약봉투 이미지에 기재된 [조제약 / 처방 의약품 목록]을 1행부터 마지막 행까지 단 하나도 누락 없이 전수(100%) 추출하세요.
+당신은 대한민국 병원 처방전 및 약봉투 전문 판독 의료 AI입니다.
+첨부된 처방전/약봉투 이미지에 기재된 [처방 의약품 / 조제약 목록]을 첫 번째 줄부터 마지막 줄까지 단 하나의 약품도 누락하지 말고 전수(100%) 추출하세요.
 
-방향 규칙:
-- 이미지가 90도, 180도, 270도 회전되어 있더라도 올바른 방향으로 자동 보정하여 판독하세요.
+[추출 규칙]
+1. 처방전에 4개 약물이 적혀 있으면 반드시 4개 모두, 5개면 5개 모두 추출해야 합니다.
+2. 약품명에 기재된 정식 처방명을 추출하세요 (예: 레일라디에스정, 뮤코라민정, 프레나정, 아트놀셋세미정, 코대원정, 펜잘8시간이알서방정, 뮤코메드캡슐, 위더스세픽심캡슐).
+3. 환자 이름, 병원명, 의원명, 질병코드, 조제일자 등은 절대 약품명으로 추출하지 마세요.
+4. (수출명:...) 같은 수출용 명칭이나 _(1정) 같은 포장단위 표기는 제거하고 국내 정식 처방명을 우선하세요.
 
 반드시 다음 JSON 형식으로만 응답하세요:
 {
   "drugs": [
     {
-      "name": "정식 의약품명 (예: 렉시핀정400mg, 아세브론캡슐, 타이레놀8시간이알서방정)",
-      "ingredient": "주요 성분명 (알 수 있는 경우, 예: 독소필린, 아세브로필린, 아세트아미노펜)",
-      "dosage": "용량/용법 (예: 1회 1정 1일 2회)"
+      "name": "정식 의약품명",
+      "ingredient": "주요 성분명 (처방전에 적혀 있거나 명확한 경우)",
+      "dosage": "1회 투약량 및 1일 투여횟수 (예: 1회 1정 1일 2회)"
     }
   ],
   "rawSummary": "추출된 전체 조제약 요약"
 }
-
-필수 준수 사항:
-1. 처방전에 적힌 조제약 개수가 3개면 반드시 3개 모두, 5개면 5개 모두 전수 추출해야 합니다. 일부만 추출하지 마세요.
-2. 약품명에서 오타나 불필요한 기호를 제거하고 정식 의약품명으로 정제하세요.
-3. 반드시 유효한 JSON 형식으로만 답변하세요.
 `;
 
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
