@@ -165,31 +165,45 @@ async function fetchFromMfdsApi(query) {
         }
 
         html += `
-          <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-3 mb-3">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div>
-                <div class="flex items-center gap-2">
-                  <h2 class="text-xl font-extrabold text-slate-900">${itemName}</h2>
-                  <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">${spclty}${prductType}</span>
+          <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-3.5 mb-3">
+            <!-- 1. 처방명, 제약회사 & 판정 뱃지 -->
+            <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div class="space-y-1">
+                <div class="text-sm text-slate-600 font-medium">
+                  처방명 : <span class="text-base font-bold text-slate-900">${itemName}</span>
                 </div>
-                <p class="text-xs text-slate-400 mt-0.5">${entpName} · 식약처 국가허가의약품</p>
+                <div class="text-xs text-slate-500 font-medium">
+                  제약회사 : <span class="text-slate-700">${entpName}</span>
+                </div>
               </div>
-              <div>${statusHtml}</div>
+              <div class="shrink-0 whitespace-nowrap">
+                ${statusHtml}
+              </div>
             </div>
 
-            ${ingrName ? `
-              <div class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg flex items-center gap-1.5">
-                <span class="font-bold text-slate-700">주성분:</span> <span>${ingrName}</span>
+            <!-- 2. 성분명 (글씨 키움) -->
+            <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+              <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
+              <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
+                ${ingrName || '성분 정보 확인'}
               </div>
-            ` : ''}
+            </div>
 
+            <!-- 3. 전문의약품, 분류 (아래로 분리 배치) -->
+            <div class="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">${spclty}</span>
+              ${prductType ? `<span class="text-slate-500">${prductType}</span>` : ''}
+            </div>
+
+            <!-- 4. 연구진 검토 소견 -->
             ${detectedRules.length > 0 ? `
-              <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs leading-relaxed space-y-1.5">
-                <strong class="font-extrabold block text-sm ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+              <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
+                <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
                 ${detectedRules.map(r => `<p>• <strong>[${r.koreanName}]</strong> ${r.opinion}</p>`).join('')}
               </div>
             ` : `
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs leading-relaxed">
+              <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
+                <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
                 현재 등록된 160여 종의 다이어트 한약 금기/주의 성분과 중복되지 않는 안전한 약물입니다.
               </div>
             `}
@@ -251,77 +265,70 @@ function renderCommercialCard(drug) {
 
   if (isProhibited) {
     statusHtml = `
-      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-red-100 text-red-700 border-2 border-red-300 shadow-sm">
+      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-red-100 text-red-700 border-2 border-red-300 shadow-sm shrink-0 whitespace-nowrap">
         <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> 🔴 병용 복용 불가
       </span>
     `;
     borderClass = 'border-red-300 bg-red-50/20';
   } else if (isCaution) {
     statusHtml = `
-      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-amber-100 text-amber-900 border-2 border-amber-400 shadow-sm">
+      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-amber-100 text-amber-900 border-2 border-amber-400 shadow-sm shrink-0 whitespace-nowrap">
         <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> 🟡 병용 주의 약물
       </span>
     `;
     borderClass = 'border-amber-300 bg-amber-50/30';
   } else {
     statusHtml = `
-      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm">
+      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap">
         <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능
       </span>
     `;
     borderClass = 'border-emerald-200 bg-emerald-50/20';
   }
 
+  const ingrSummary = parsedIngredients.map(i => `${i.name}${i.amount ? ` (${i.amount})` : ''}`).join(', ');
+
   return `
-    <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-4 mb-3">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-slate-900">${drug.brandName}</h2>
-          <p class="text-xs text-slate-400">${drug.company || ''} ${drug.category ? `· ${drug.category}` : ''}</p>
+    <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-3.5 mb-3">
+      <!-- 1. 처방명, 제약회사 & 판정 뱃지 -->
+      <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div class="space-y-1">
+          <div class="text-sm text-slate-600 font-medium">
+            처방명 : <span class="text-base font-bold text-slate-900">${drug.brandName}</span>
+          </div>
+          <div class="text-xs text-slate-500 font-medium">
+            제약회사 : <span class="text-slate-700">${drug.company || '제조사 정보'}</span>
+          </div>
         </div>
-        <div>${statusHtml}</div>
-      </div>
-
-      <div>
-        <span class="text-xs font-bold text-slate-500 block mb-1.5">포함된 성분 (${parsedIngredients.length}개)</span>
-        <div class="flex flex-wrap gap-1.5">
-          ${parsedIngredients.map(ing => {
-            let badge = 'bg-slate-100 text-slate-700 border border-slate-200';
-            let label = '안전';
-            if (ing.status === 'PROHIBITED') {
-              badge = 'bg-red-100 text-red-800 font-bold border border-red-300';
-              label = '🔴 불가 성분';
-            } else if (ing.status === 'CAUTION') {
-              badge = 'bg-amber-100 text-amber-900 font-bold border border-amber-300';
-              label = '🟡 주의 성분';
-            }
-            return `
-              <span class="text-xs px-2.5 py-1 rounded-lg ${badge}">
-                ${ing.name} ${ing.amount ? `(${ing.amount})` : ''} · <strong>${label}</strong>
-              </span>
-            `;
-          }).join('')}
+        <div class="shrink-0 whitespace-nowrap">
+          ${statusHtml}
         </div>
       </div>
 
+      <!-- 2. 성분명 (글씨 키움) -->
+      <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+        <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
+        <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
+          ${ingrSummary}
+        </div>
+      </div>
+
+      <!-- 3. 전문의약품 및 효능 분류 -->
+      <div class="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+        <span class="px-2 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">${drug.category && drug.category.includes('처방약') ? '전문의약품' : '일반의약품'}</span>
+        ${drug.category ? `<span class="text-slate-500">· ${drug.category}</span>` : ''}
+      </div>
+
+      <!-- 4. 연구진 검토 소견 -->
       ${opinions.length > 0 ? `
-        <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border-2 border-red-200 text-red-950' : 'bg-amber-50 border-2 border-amber-300 text-amber-950'} text-xs leading-relaxed space-y-1.5">
-          <div class="font-extrabold flex items-center gap-1.5 text-sm ${isProhibited ? 'text-red-700' : 'text-amber-800'}">
-            <i data-lucide="${isProhibited ? 'alert-octagon' : 'alert-triangle'}" class="w-4 h-4"></i>
-            <span>연구진 임상 의견 / ${isProhibited ? '복용 불가 사유' : '주의 사항'}:</span>
-          </div>
-          <div class="space-y-1.5 pt-1">
-            ${opinions.map(op => `
-              <p class="pl-2 border-l-2 ${op.status === 'PROHIBITED' ? 'border-red-400' : 'border-amber-400'}">
-                <strong>[${op.name}]</strong> ${op.text}
-              </p>
-            `).join('')}
-          </div>
+        <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
+          <strong class="font-extrabold block text-sm sm:text-base ${isProhibited ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
+          ${opinions.map(op => `<p>• <strong>[${op.name}]</strong> ${op.text}</p>`).join('')}
         </div>
       ` : `
-        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2">
-          <i data-lucide="check" class="w-4 h-4 text-emerald-600"></i>
-          <span>린다이어트 한약과 충돌하거나 위험한 상호작용 성분이 없습니다. 안심하고 복용하셔도 됩니다.</span>
+        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm leading-relaxed">
+          <strong class="font-bold text-emerald-800 block mb-1">연구진 검토 소견:</strong>
+          린다이어트 한약과 충돌하거나 위험한 상호작용 성분이 없습니다. 안심하고 복용하셔도 됩니다.
         </div>
       `}
     </div>
@@ -334,31 +341,47 @@ function renderIngredientCard(ing) {
   const isCaution = ing.status === 'CAUTION';
 
   let statusBadge = isProhibited 
-    ? `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-red-100 text-red-700 border-2 border-red-300 shadow-sm"><i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> 🔴 병용 복용 불가</span>`
+    ? `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-red-100 text-red-700 border-2 border-red-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> 🔴 병용 복용 불가</span>`
     : (isCaution 
-    ? `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-amber-100 text-amber-900 border-2 border-amber-400 shadow-sm"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> 🟡 병용 주의 약물</span>`
-    : `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>`);
+    ? `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-amber-100 text-amber-900 border-2 border-amber-400 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> 🟡 병용 주의 약물</span>`
+    : `<span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-300 shadow-sm shrink-0 whitespace-nowrap"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i> 🟢 병용 복용 가능</span>`);
 
   return `
-    <div class="bg-white rounded-2xl p-5 border-2 ${isProhibited ? 'border-red-300 bg-red-50/20' : (isCaution ? 'border-amber-300 bg-amber-50/30' : 'border-emerald-200')} shadow-sm space-y-3 mb-3">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-slate-900">${ing.koreanName}</h2>
-          <p class="text-xs text-slate-400 font-mono">${ing.englishName || ''} · ${ing.category || ''}</p>
+    <div class="bg-white rounded-2xl p-5 border-2 ${isProhibited ? 'border-red-300 bg-red-50/20' : (isCaution ? 'border-amber-300 bg-amber-50/30' : 'border-emerald-200')} shadow-sm space-y-3.5 mb-3">
+      <!-- 1. 성분명 & 판정 뱃지 -->
+      <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div class="space-y-1">
+          <div class="text-sm text-slate-600 font-medium">
+            성분 검색 : <span class="text-base font-bold text-slate-900">${ing.koreanName}</span>
+          </div>
+          <div class="text-xs text-slate-500 font-medium">
+            영문명 : <span class="text-slate-700">${ing.englishName || '-'}</span>
+          </div>
         </div>
-        <div>${statusBadge}</div>
+        <div class="shrink-0 whitespace-nowrap">
+          ${statusBadge}
+        </div>
       </div>
 
-      <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border-2 border-red-200 text-red-950' : 'bg-amber-50 border-2 border-amber-300 text-amber-950'} text-xs leading-relaxed space-y-1">
-        <strong class="font-extrabold block text-sm ${isProhibited ? 'text-red-700' : 'text-amber-800'}">연구진 임상 의견:</strong>
-        <p class="pt-1">${ing.opinion}</p>
+      <!-- 2. 성분명 (글씨 키움) -->
+      <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
+        <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
+        <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
+          ${ing.koreanName} <span class="text-sm font-semibold text-slate-500">(${ing.englishName || ''})</span>
+        </div>
       </div>
 
-      ${ing.commonBrands && ing.commonBrands.length > 0 ? `
-        <div class="text-xs text-slate-500 pt-1">
-          <strong>대표 제품 예시:</strong> ${ing.commonBrands.join(', ')}
-        </div>
-      ` : ''}
+      <!-- 3. 약효 분류 -->
+      <div class="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+        <span class="px-2 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">성분 분류</span>
+        <span class="text-slate-500">· ${ing.category}</span>
+      </div>
+
+      <!-- 4. 연구진 검토 소견 -->
+      <div class="p-4 rounded-xl ${isProhibited ? 'bg-red-50 border border-red-200 text-red-950' : (isCaution ? 'bg-amber-50 border border-amber-300 text-amber-950' : 'bg-emerald-50 border border-emerald-200 text-emerald-950')} text-xs sm:text-sm leading-relaxed space-y-1.5">
+        <strong class="font-extrabold block text-sm sm:text-base ${isProhibited ? 'text-red-700' : (isCaution ? 'text-amber-800' : 'text-emerald-800')}">연구진 검토 소견:</strong>
+        <p>${ing.opinion}</p>
+      </div>
     </div>
   `;
 }
