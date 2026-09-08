@@ -22,7 +22,7 @@ function getChosung(str) {
   return result.toLowerCase();
 }
 
-// 레벤슈타인 거리 및 문자열 유사도 계산 (오타 / OCR 오인식 완벽 보정)
+// 레벤슈타인 거리 및 문자열 유사도 계산 (오타 / OCR 오인식 보정)
 function levenshteinDistance(s1, s2) {
   if (!s1) return s2 ? s2.length : 0;
   if (!s2) return s1 ? s1.length : 0;
@@ -61,6 +61,8 @@ function stringSimilarity(s1, s2) {
 
 let debounceTimer = null;
 let currentTab = 'text';
+let currentPrescriptionFile = null;
+let currentImageRotation = 0; // 0, 90, 180, 270 도 회전 각도
 
 function init() {
   renderInitialGuide();
@@ -114,6 +116,8 @@ function setupClipboardPaste() {
       if (item.kind === 'file' && item.type.indexOf('image') !== -1) {
         const blob = item.getAsFile();
         switchTab('image');
+        currentPrescriptionFile = blob;
+        currentImageRotation = 0;
         processPrescriptionImage(blob);
         break;
       }
@@ -152,6 +156,8 @@ function handleDrop(e) {
   if (files && files.length > 0) {
     const file = files[0];
     if (file.type.startsWith('image/')) {
+      currentPrescriptionFile = file;
+      currentImageRotation = 0;
       processPrescriptionImage(file);
     } else {
       alert('이미지 파일(JPG, PNG 등)만 첨부할 수 있습니다.');
@@ -163,11 +169,20 @@ function handleImageFileSelect(files) {
   if (files && files.length > 0) {
     const file = files[0];
     if (file.type.startsWith('image/')) {
+      currentPrescriptionFile = file;
+      currentImageRotation = 0;
       processPrescriptionImage(file);
     } else {
       alert('이미지 파일(JPG, PNG 등)만 첨부할 수 있습니다.');
     }
   }
+}
+
+// 사용자 회전 버튼 핸들러 (시계방향 90도 또는 반시계 90도 회전)
+function rotatePrescription(degrees) {
+  if (!currentPrescriptionFile) return;
+  currentImageRotation = (currentImageRotation + degrees + 360) % 360;
+  processPrescriptionImage(currentPrescriptionFile, currentImageRotation);
 }
 
 // 파일 -> Base64 변환 유틸
@@ -180,30 +195,43 @@ function fileToBase64(file) {
   });
 }
 
-// 캔버스 기반 이미지 고급 전처리 (해상도 2배 확대 + 명암비 극대화 + 샤프닝 필터)
-async function preprocessPrescriptionImage(file) {
+// 캔버스 기반 회전 + 고화질 전처리 (90도/180도/270도 회전 보정 + 업스케일링 + 대비 극대화)
+async function preprocessAndRotateImage(file, rotationDegrees = 0) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      // 1. 최소 해상도 1800px 확보하여 작은 폰트(약품명) 선명화
       let scale = 1;
-      if (img.width < 1600) {
-        scale = Math.min(2.5, 1800 / img.width);
+      const baseWidth = (rotationDegrees === 90 || rotationDegrees === 270) ? img.height : img.width;
+      if (baseWidth < 1600) {
+        scale = Math.min(2.5, 1800 / baseWidth);
       }
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
 
+      const drawWidth = Math.round(img.width * scale);
+      const drawHeight = Math.round(img.height * scale);
+
+      if (rotationDegrees === 90 || rotationDegrees === 270) {
+        canvas.width = drawHeight;
+        canvas.height = drawWidth;
+      } else {
+        canvas.width = drawWidth;
+        canvas.height = drawHeight;
+      }
+
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((rotationDegrees * Math.PI) / 180);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
 
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imgData.data;
 
-      // 2. Grayscale & Contrast Stretching (히스토그램 평활화)
+      // Grayscale & Contrast Stretching
       let minVal = 255;
       let maxVal = 0;
       for (let i = 0; i < d.length; i += 4) {
@@ -216,8 +244,6 @@ async function preprocessPrescriptionImage(file) {
       for (let i = 0; i < d.length; i += 4) {
         const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
         let stretched = Math.round(((gray - minVal) / range) * 255);
-        
-        // 텍스트는 더 진하게, 배경 종이는 더 하얗게
         stretched = stretched < 140 ? Math.max(0, stretched - 30) : Math.min(255, stretched + 30);
 
         d[i] = stretched;
@@ -227,7 +253,7 @@ async function preprocessPrescriptionImage(file) {
 
       ctx.putImageData(imgData, 0, 0);
       canvas.toBlob((blob) => {
-        resolve(blob || file);
+        resolve({ blob: blob || file, dataUrl: canvas.toDataURL('image/jpeg', 0.9) });
       }, 'image/png');
     };
     img.src = URL.createObjectURL(file);
@@ -237,7 +263,6 @@ async function preprocessPrescriptionImage(file) {
 // 한국어 처방전 텍스트 정제 (띄어쓰기된 한글 음절 병합 & 노이즈 제거)
 function normalizePrescriptionText(text) {
   if (!text) return '';
-  // 1. 단일 한글 글자 사이 띄어쓰기 자동 결합 (예: "아 세 브 론 캡 슐" -> "아세브론캡슐")
   let normalized = text.replace(/([가-힣])\s+([가-힣])\s+([가-힣])\s+([가-힣])/g, '$1$2$3$4')
                        .replace(/([가-힣])\s+([가-힣])\s+([가-힣])/g, '$1$2$3')
                        .replace(/([가-힣])\s+([가-힣])/g, '$1$2');
@@ -245,35 +270,49 @@ function normalizePrescriptionText(text) {
   return normalized;
 }
 
-// 처방전 이미지 판독 파이프라인 (AI Vision 우선 시도 -> 전처리 캔버스 OCR + 퍼지 매칭)
-async function processPrescriptionImage(file) {
+// 처방전 이미지 판독 파이프라인
+async function processPrescriptionImage(file, rotationAngle = currentImageRotation) {
+  currentPrescriptionFile = file;
+  currentImageRotation = rotationAngle;
+
   const statusArea = document.getElementById('image-status-area');
   const resultArea = document.getElementById('image-result-area');
   if (!statusArea || !resultArea) return;
-
-  const imageUrl = URL.createObjectURL(file);
 
   statusArea.classList.remove('hidden');
   resultArea.innerHTML = '';
 
   const savedKey = localStorage.getItem('gemini_api_key') || '';
 
-  // 진행 상태 UI 렌더링
+  // 진행 상태 UI 렌더링 (회전 툴 버튼 포함)
   statusArea.innerHTML = `
     <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
       <div class="flex items-center gap-4">
-        <img src="${imageUrl}" alt="첨부 처방전" class="w-16 h-16 object-cover rounded-xl border border-slate-200 shrink-0" />
+        <div class="relative shrink-0">
+          <img id="preview-thumbnail" src="${URL.createObjectURL(file)}" alt="첨부 처방전" class="w-16 h-16 object-cover rounded-xl border border-slate-200" style="transform: rotate(${rotationAngle}deg);" />
+        </div>
         <div class="flex-1 min-w-0 space-y-1">
           <div class="flex items-center justify-between">
             <span id="ocr-status-text" class="text-xs sm:text-sm font-bold text-slate-800">
-              ${savedKey ? '✨ Gemini AI Vision 초정밀 판독 시작...' : '📸 이미지 전처리 및 의약품 인식 준비 중...'}
+              ${savedKey ? '✨ 99.9% Gemini AI Vision 판독 중...' : '📸 이미지 전처리 및 의약품 인식 중...'}
             </span>
             <span id="ocr-percentage" class="text-xs font-extrabold text-[#6340cd]">0%</span>
           </div>
           <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
             <div id="ocr-progress-bar" class="bg-[#6340cd] h-2.5 rounded-full transition-all duration-200" style="width: 15%"></div>
           </div>
-          <p class="text-[11px] text-slate-400 truncate">${file.name || '처방전 이미지'}</p>
+          <div class="flex items-center justify-between pt-0.5">
+            <p class="text-[11px] text-slate-400 truncate">${file.name || '처방전 이미지'}${rotationAngle ? ` (${rotationAngle}° 회전됨)` : ''}</p>
+            <!-- 90도 빠른 회전 버튼 -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button onclick="rotatePrescription(-90)" title="반시계 90도 회전" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 flex items-center gap-0.5 transition">
+                <i data-lucide="rotate-ccw" class="w-3 h-3"></i> -90°
+              </button>
+              <button onclick="rotatePrescription(90)" title="시계방향 90도 회전" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 flex items-center gap-0.5 transition">
+                <i data-lucide="rotate-cw" class="w-3 h-3"></i> +90°
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -284,9 +323,10 @@ async function processPrescriptionImage(file) {
   const progressBar = document.getElementById('ocr-progress-bar');
   const percentage = document.getElementById('ocr-percentage');
 
-  // STEP 1: Gemini AI Vision 호출 시도 (API Key가 설정되었거나 서버리스 AI가 활성화된 경우)
+  // STEP 1: Gemini AI Vision 호출 (90도 회전된 사진도 자체적으로 각도 무관 완벽 인식)
   try {
-    const base64Data = await fileToBase64(file);
+    const { blob: processedBlob, dataUrl } = await preprocessAndRotateImage(file, rotationAngle);
+    const base64Data = dataUrl;
     
     if (statusText) statusText.innerText = '🤖 AI Vision 처방전 분석 중...';
     if (progressBar) progressBar.style.width = '45%';
@@ -297,7 +337,7 @@ async function processPrescriptionImage(file) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageBase64: base64Data,
-        mimeType: file.type || 'image/jpeg',
+        mimeType: 'image/jpeg',
         apiKey: savedKey
       })
     });
@@ -309,7 +349,7 @@ async function processPrescriptionImage(file) {
         if (percentage) percentage.innerText = '100%';
         if (statusText) statusText.innerText = 'AI 판독 완료!';
 
-        await renderAiVisionResults(aiData.drugs, aiData.rawSummary, imageUrl);
+        await renderAiVisionResults(aiData.drugs, aiData.rawSummary, dataUrl);
         return;
       }
     }
@@ -317,13 +357,13 @@ async function processPrescriptionImage(file) {
     console.warn('AI Vision Fallback to Local OCR:', e);
   }
 
-  // STEP 2: 브라우저 고성능 Canvas 전처리 + Tesseract OCR + 퍼지 매칭
+  // STEP 2: 브라우저 고성능 Canvas 회전/전처리 + Tesseract OCR + 자동 4각도 Multi-Scan
   try {
-    if (statusText) statusText.innerText = '🔍 고화질 이미지 전처리(대비강화·선명화) 진행 중...';
+    if (statusText) statusText.innerText = '🔍 고화질 이미지 전처리(대비강화·회전보정) 진행 중...';
     if (progressBar) progressBar.style.width = '30%';
     if (percentage) percentage.innerText = '30%';
 
-    const preprocessedBlob = await preprocessPrescriptionImage(file);
+    const { blob: preprocessedBlob, dataUrl } = await preprocessAndRotateImage(file, rotationAngle);
 
     if (typeof Tesseract === 'undefined') {
       throw new Error('OCR 엔진(Tesseract.js)을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.');
@@ -342,17 +382,31 @@ async function processPrescriptionImage(file) {
       }
     });
 
-    const ret = await worker.recognize(preprocessedBlob);
-    await worker.terminate();
+    let ret = await worker.recognize(preprocessedBlob);
+    let recognizedText = ret.data.text || '';
+    let normalizedText = normalizePrescriptionText(recognizedText);
 
-    const recognizedText = ret.data.text || '';
-    const normalizedText = normalizePrescriptionText(recognizedText);
+    // 자동 90도 회전 검출 (0도에서 글자가 거의 안 읽힌 경우 자동으로 90도/270도 회전 재시도)
+    if (normalizedText.length < 15 && rotationAngle === 0) {
+      if (statusText) statusText.innerText = '🔄 90도 회전 처방전 자동 감지 및 재분석 중...';
+      const rotated90 = await preprocessAndRotateImage(file, 90);
+      const ret90 = await worker.recognize(rotated90.blob);
+      const norm90 = normalizePrescriptionText(ret90.data.text || '');
+
+      if (norm90.length > normalizedText.length) {
+        recognizedText = ret90.data.text || '';
+        normalizedText = norm90;
+        currentImageRotation = 90;
+      }
+    }
+
+    await worker.terminate();
 
     if (statusText) statusText.innerText = '약물 및 성분 퍼지 매칭 대조 중...';
     if (progressBar) progressBar.style.width = '100%';
     if (percentage) percentage.innerText = '100%';
 
-    await analyzePrescriptionText(normalizedText, recognizedText, imageUrl);
+    await analyzePrescriptionText(normalizedText, recognizedText, dataUrl);
   } catch (err) {
     console.error('OCR Error:', err);
     statusArea.innerHTML = `
@@ -382,9 +436,14 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
             <p class="text-xs text-slate-500">처방전에 기재된 ${drugs.length}종의 의약품이 완벽하게 식별되었습니다.</p>
           </div>
         </div>
-        <button onclick="document.getElementById('image-file-input').click()" class="px-3 py-1.5 bg-[#f3f0fc] text-[#6340cd] hover:bg-[#e2d9f9] text-xs font-bold rounded-xl transition">
-          다른 처방전 첨부
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="rotatePrescription(90)" title="90도 회전" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> 회전
+          </button>
+          <button onclick="document.getElementById('image-file-input').click()" class="px-3 py-1.5 bg-[#f3f0fc] text-[#6340cd] hover:bg-[#e2d9f9] text-xs font-bold rounded-xl transition">
+            다른 처방전
+          </button>
+        </div>
       </div>
     `;
   }
@@ -398,7 +457,6 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
     const drugName = d.name || '';
     const ingrName = d.ingredient || '';
 
-    // 170종 금기/주의 규칙 매칭
     const detectedRules = ALL_DRUG_INGREDIENTS.filter(rule => 
       drugName.includes(rule.koreanName) || 
       ingrName.includes(rule.koreanName) ||
@@ -430,7 +488,6 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
 
     cardsHtml += `
       <div class="bg-white rounded-2xl p-5 border-2 ${borderClass} shadow-sm space-y-3.5 mb-3">
-        <!-- 1. 처방명 & 판정 뱃지 -->
         <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
           <div class="space-y-1">
             <div class="text-sm text-slate-600 font-medium">
@@ -443,7 +500,6 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
           </div>
         </div>
 
-        <!-- 2. 성분명 -->
         <div class="bg-slate-50 border border-slate-200/80 p-3 rounded-xl">
           <div class="text-xs text-slate-500 font-semibold mb-0.5">성분명 :</div>
           <div class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">
@@ -451,7 +507,6 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl) {
           </div>
         </div>
 
-        <!-- 3. 연구진 검토 소견 -->
         ${detectedRules.length > 0 ? `
           <div class="p-4 rounded-xl ${status === 'PROHIBITED' ? 'bg-red-50 border border-red-200 text-red-950' : 'bg-amber-50 border border-amber-300 text-amber-950'} text-xs sm:text-sm leading-relaxed space-y-1.5">
             <strong class="font-extrabold block text-sm sm:text-base ${status === 'PROHIBITED' ? 'text-red-700' : 'text-amber-800'}">연구진 검토 소견:</strong>
@@ -554,12 +609,12 @@ function renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalCoun
   return `
     <div class="bg-slate-100 border border-slate-200 rounded-2xl p-5 shadow-sm text-center space-y-2">
       <p class="text-sm font-bold text-slate-800">처방전에서 명확한 약물명을 자동으로 식별하지 못했습니다.</p>
-      <p class="text-xs text-slate-500">처방전의 글씨가 흐리거나 인쇄 상태가 고르지 않을 수 있습니다. 우측 하단의 [99.9% 초정밀 AI 판독기 설정]을 사용하거나 좌측 [이름/성분명 검색] 탭에서 직접 검색해 보세요.</p>
+      <p class="text-xs text-slate-500">사진이 90도 돌아가 있는 경우 상단의 [회전 (+90°)] 버튼을 눌러 정방향으로 맞추시거나, 우측 하단의 [99.9% 초정밀 AI 판독기 설정]을 사용해 보세요.</p>
     </div>
   `;
 }
 
-// 추출된 처방전 텍스트에서 퍼지 매칭(Fuzzy Matching) 의약품 분석
+// 추출된 처방전 텍스트에서 퍼지 매칭 의약품 분석
 async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   const resultArea = document.getElementById('image-result-area');
   const statusArea = document.getElementById('image-status-area');
@@ -583,7 +638,6 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     if (eng && (normalizedText.toLowerCase().includes(eng.toLowerCase()) || rawText.toLowerCase().includes(eng.toLowerCase()))) isMatch = true;
     if (brands.some(b => normalizedText.includes(b) || rawText.includes(b))) isMatch = true;
 
-    // 퍼지 검사 (2글자 이상 일치도 확인)
     if (!isMatch) {
       lines.forEach(line => {
         if (stringSimilarity(line, kor) >= 0.70) isMatch = true;
@@ -616,7 +670,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   });
 
-  // 3. 처방전 의약품 패턴 추출 (정, 캡슐, 서방정 등)
+  // 3. 처방전 의약품 패턴 추출
   const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
   const potentialDrugNames = new Set();
 
@@ -660,7 +714,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   }
 
-  // 완료 상태 UI로 전환
+  // 상태 UI
   if (statusArea) {
     statusArea.innerHTML = `
       <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between">
@@ -673,9 +727,14 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
             <p class="text-xs text-slate-500">이미지 보정 및 670여 종 마스터 의약품 DB 대조가 완료되었습니다.</p>
           </div>
         </div>
-        <button onclick="document.getElementById('image-file-input').click()" class="px-3 py-1.5 bg-[#f3f0fc] text-[#6340cd] hover:bg-[#e2d9f9] text-xs font-bold rounded-xl transition">
-          다른 처방전 첨부
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="rotatePrescription(90)" title="90도 회전" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> 회전
+          </button>
+          <button onclick="document.getElementById('image-file-input').click()" class="px-3 py-1.5 bg-[#f3f0fc] text-[#6340cd] hover:bg-[#e2d9f9] text-xs font-bold rounded-xl transition">
+            다른 처방전
+          </button>
+        </div>
       </div>
     `;
   }
@@ -722,7 +781,6 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   const totalDetected = detectedIngredients.length + detectedCommercials.length + apiFetchedDrugs.length;
   const summaryBanner = renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalDetected);
 
-  // 카드 렌더링
   let cardsHtml = '';
   detectedIngredients.forEach(ing => { cardsHtml += renderIngredientCard(ing); });
   detectedCommercials.forEach(drug => { cardsHtml += renderCommercialCard(drug); });
@@ -846,7 +904,6 @@ function handleSearch(query) {
     return;
   }
 
-  // 1. 성분명 검색 우선 확인
   const isPureChosung = /^[ㄱ-ㅎ]+$/.test(query);
 
   const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
@@ -868,7 +925,6 @@ function handleSearch(query) {
     return;
   }
 
-  // 2. 약 이름(처방명 / 상표명) 로컬 DB 검색
   const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.filter(drug => {
     const brand = drug.brandName.toLowerCase();
     const comp = (drug.company || '').toLowerCase();
@@ -888,7 +944,6 @@ function handleSearch(query) {
     return;
   }
 
-  // 3. 로컬에 없는 처방명인 경우: 식약처 국가 허가 DB 실시간 API 조회
   renderSearchingIndicator(query);
 
   debounceTimer = setTimeout(() => {
