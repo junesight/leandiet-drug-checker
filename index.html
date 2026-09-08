@@ -167,11 +167,20 @@
       </div>
     </div>
 
-    <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 -->
-    <div class="text-center pt-6">
-      <button onclick="toggleAllIngredientsModal()" class="text-xs text-slate-400 hover:text-slate-700 underline font-medium transition">
-        전체 금기(67종) 및 주의(100여종) 성분 및 연구진 의견 목록 보기
-      </button>
+    <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 & 부부한의원 로고 푸터 -->
+    <div class="text-center pt-8 pb-4 space-y-5 border-t border-slate-200/60 mt-8">
+      <div>
+        <button onclick="toggleAllIngredientsModal()" class="text-xs text-slate-400 hover:text-slate-700 underline font-medium transition">
+          전체 금기(67종) 및 주의(100여종) 성분 및 연구진 의견 목록 보기
+        </button>
+      </div>
+      
+      <div class="flex flex-col items-center justify-center gap-1.5 pt-2">
+        <a href="https://booboo.co.kr" target="_blank" rel="noopener noreferrer" class="inline-block transition-transform hover:scale-105" title="부부한의원 공식 홈페이지 바로가기">
+          <img src="assets/booboo-logo.png" alt="부부한의원" class="h-14 sm:h-16 w-auto object-contain mx-auto drop-shadow-sm rounded-xl" />
+        </a>
+        <p class="text-[11px] text-slate-400 font-medium">사람 냄새나는 부부한의원</p>
+      </div>
     </div>
 
   </div>
