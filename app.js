@@ -103,29 +103,45 @@ async function fetchFromMfdsApi(query) {
   try {
     const serviceKey = API_SERVICE_KEY;
     
-    // 1. 식품의약품안전처_의약품 제품 허가정보 및 e약은요 엔드포인트 후보
-    const endpoints = [
-      `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnDtlInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
-      `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
-      `https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList?serviceKey=${serviceKey}&itemName=${encodeURIComponent(query)}&type=json`
-    ];
-
     let items = [];
     let isPermitApi = false;
 
-    for (const ep of endpoints) {
-      try {
-        const res = await fetch(ep);
-        if (!res.ok) continue;
-        const data = await res.json();
-        const found = data?.body?.items || [];
-        if (found.length > 0) {
-          items = found;
-          if (ep.includes('DrugPrdtPrmsnInfoService')) isPermitApi = true;
-          break;
+    // 1. 서버리스 API 프록시 시도 (Vercel 등 서버 환경)
+    try {
+      const serverRes = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (serverData.items && serverData.items.length > 0) {
+          items = serverData.items;
+          isPermitApi = true;
         }
-      } catch (e) {
-        // 다음 엔드포인트 시도
+      }
+    } catch (e) {
+      // 서버리스 미지원 환경(정적 호스팅)시 직접 API 시도
+    }
+
+    // 2. 직접 API 호출 시도 (로컬/CORS 허용 환경)
+    if (items.length === 0) {
+      const endpoints = [
+        `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnDtlInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
+        `https://apis.data.go.kr/1471000/DrugPrdtPrmsnInfoService05/getDrugPrdtPrmsnInq05?serviceKey=${serviceKey}&item_name=${encodeURIComponent(query)}&type=json`,
+        `https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList?serviceKey=${serviceKey}&itemName=${encodeURIComponent(query)}&type=json`
+      ];
+
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep);
+          if (!res.ok) continue;
+          const data = await res.json();
+          const found = data?.body?.items || [];
+          if (found.length > 0) {
+            items = found;
+            if (ep.includes('DrugPrdtPrmsnInfoService')) isPermitApi = true;
+            break;
+          }
+        } catch (e) {
+          // 다음 엔드포인트 시도
+        }
       }
     }
 
