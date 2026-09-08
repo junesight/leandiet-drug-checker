@@ -301,5 +301,16 @@ const POPULAR_COMMERCIAL_DRUGS = [
   { id: "relvar", brandName: "렐바엘립타", company: "GSK", category: "천식/COPD 흡입제 (처방약)", ingredients: [{ name: "빌란테롤트리페나테이트", amount: "25mcg" }, { name: "플루티카손", amount: "100~200mcg" }] },
   { id: "seretide", brandName: "세레타이드디스커스 / 에어로솔", company: "GSK", category: "천식 흡입제 (처방약)", ingredients: [{ name: "살메테롤", amount: "50mcg" }, { name: "플루티카손", amount: "100~500mcg" }] },
   { id: "cofu_tab", brandName: "코푸정 / 코푸시럽", company: "유한양행", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "17.5mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] },
-  { id: "codaewon_forte", brandName: "코대원포르테시럽 / 코대원에스시럽", company: "대원제약", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "13.1mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] }
+  { id: "codaewon_forte", brandName: "코대원포르테시럽 / 코대원에스시럽", company: "대원제약", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "13.1mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] },
+
+  // --- 정형외과 / 소염진통제 / 위장약 / 호르몬제 처방약 (레일라, 뮤코라민, 프레나, 아트놀셋 등) ---
+  { id: "layla_ds", brandName: "레일라디에스정", company: "한국피엠지제약", category: "골관절염/소염진통제 (처방약)", ingredients: [{ name: "당귀·모과·방풍·속단 복합추출물", amount: "405mg" }] },
+  { id: "layla", brandName: "레일라정", company: "한국피엠지제약", category: "골관절염/소염진통제 (처방약)", ingredients: [{ name: "당귀·모과·방풍 복합추출물", amount: "405mg" }] },
+  { id: "mucoramin", brandName: "뮤코라민정", company: "유니메드제약", category: "위점막보호제/위염·위궤양 (처방약)", ingredients: [{ name: "레바미피드", amount: "100mg" }] },
+  { id: "mucosta", brandName: "무코스타정", company: "한국오츠카", category: "위점막보호제/위염·위궤양 (처방약)", ingredients: [{ name: "레바미피드", amount: "100mg" }] },
+  { id: "prena", brandName: "프레나정", company: "태극제약", category: "부신피질호르몬/스테로이드 (처방약)", ingredients: [{ name: "메틸프레드니솔론", amount: "4mg" }] },
+  { id: "artnolset_semi", brandName: "아트놀셋세미정", company: "대웅바이오", category: "복합 진통제 (처방약)", ingredients: [{ name: "아세트아미노펜", amount: "162.5mg" }, { name: "트라마돌염산염", amount: "18.75mg" }] },
+  { id: "artnolset", brandName: "아트놀셋정", company: "대웅바이오", category: "복합 진통제 (처방약)", ingredients: [{ name: "아세트아미노펜", amount: "325mg" }, { name: "트라마돌염산염", amount: "37.5mg" }] },
+  { id: "tralac", brandName: "트라락정 / 울트라셋정", company: "한국얀센", category: "중증/만성 진통제 (처방약)", ingredients: [{ name: "아세트아미노펜", amount: "325mg" }, { name: "트라마돌염산염", amount: "37.5mg" }] },
+  { id: "ultracet_semi", brandName: "울트라셋세미정", company: "한국얀센", category: "복합 진통제 (처방약)", ingredients: [{ name: "아세트아미노펜", amount: "162.5mg" }, { name: "트라마돌염산염", amount: "18.75mg" }] }
 ];

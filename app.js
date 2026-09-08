@@ -668,15 +668,41 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
       }
     }
 
-    if (isMatch && !matchedRuleIds.has(rule.id)) {
-      matchedRuleIds.add(rule.id);
-      detectedIngredients.push(rule);
-    }
+  // 1. 처방전 약품명 단어 정규식 추출 및 접미사 정제 (예: 레일라디에스정_(1정) -> 레일라디에스정, 아트놀셋세미정_(1정) -> 아트놀셋세미정)
+  const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
+  const potentialDrugNames = new Set();
+
+  lines.forEach(line => {
+    // 괄호 및 언더스코어 용량 접미사 제거
+    const cleanedLine = line.replace(/_?\s*\(\s*\d+\s*(?:정|캡슐|포|매|환|ml|g)\s*\)/gi, ' ')
+                            .replace(/_\s*\d+\s*(?:정|캡슐|포|매|환)/gi, ' ')
+                            .replace(/[\[\]\{\}\<\>\:\;\,\/]/g, ' ');
+    const words = cleanedLine.split(/\s+/);
+    words.forEach(w => {
+      const match = w.match(drugPattern);
+      if (match) {
+        match.forEach(m => {
+          let cleanM = m.replace(/_.*$/, '').trim();
+          if (cleanM.length >= 2 && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정', '판정', '처방'].includes(cleanM)) {
+            potentialDrugNames.add(cleanM);
+          }
+        });
+      }
+    });
   });
 
-  // 2. 주요 시판 약물 DB 500종 전수 슬라이딩 윈도우 퍼지 매칭
+  // 2. [처방명 최우선 검색] 주요 시판 약물 DB 500종 전수 슬라이딩 윈도우 & 후보 단어 매칭
   POPULAR_COMMERCIAL_DRUGS.forEach(drug => {
     let isMatch = findFuzzyMatchesInText(combinedFullText, drug.brandName, 0.75);
+
+    if (!isMatch) {
+      for (const cand of potentialDrugNames) {
+        if (drug.brandName.includes(cand) || cand.includes(drug.brandName.replace(/\s*\(.*$/, '')) || stringSimilarity(cand, drug.brandName) >= 0.75) {
+          isMatch = true;
+          break;
+        }
+      }
+    }
 
     if (isMatch && !matchedCommercialIds.has(drug.id)) {
       matchedCommercialIds.add(drug.id);
@@ -684,30 +710,10 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   });
 
-  // 3. 처방전 패턴 단어 정규식 추출
-  const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
-  const potentialDrugNames = new Set();
-
-  lines.forEach(line => {
-    const cleaned = line.replace(/[\[\]\(\)\{\}\<\>\:\;\,\/]/g, ' ');
-    const words = cleaned.split(/\s+/);
-    words.forEach(w => {
-      const match = w.match(drugPattern);
-      if (match) {
-        match.forEach(m => {
-          if (m.length >= 2 && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정'].includes(m)) {
-            potentialDrugNames.add(m);
-          }
-        });
-      }
-    });
-  });
-
-  // 식약처 실시간 API 보완 검색 (중복 제외)
+  // 3. 미매칭 약품명 후보들 식약처 실시간 공공데이터 API 전수 검색
   const candidateList = Array.from(potentialDrugNames).filter(cand => {
-    return !detectedCommercials.some(d => d.brandName.includes(cand) || cand.includes(d.brandName)) &&
-           !detectedIngredients.some(i => cand.includes(i.koreanName));
-  }).slice(0, 5);
+    return !detectedCommercials.some(d => d.brandName.includes(cand) || cand.includes(d.brandName.replace(/\s*\(.*$/, '')));
+  }).slice(0, 8);
 
   let apiFetchedDrugs = [];
   if (candidateList.length > 0) {
@@ -722,18 +728,51 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
           }
         }
         if (items.length > 0) {
-          apiFetchedDrugs.push(items[0]);
+          const fetchedItem = items[0];
+          const fetchedName = fetchedItem.ITEM_NAME || fetchedItem.itemName || '';
+          if (!apiFetchedDrugs.some(a => (a.ITEM_NAME || a.itemName) === fetchedName)) {
+            apiFetchedDrugs.push(fetchedItem);
+          }
         }
       } catch (e) {}
     }
   }
 
-  // 중복 정리: 시판 약물에 포함된 성분과 단독 성분 중복 시 시판 약물 우선 표기
-  const finalIngredients = detectedIngredients.filter(ing => {
-    return !detectedCommercials.some(d => 
-      d.ingredients.some(di => di.name.includes(ing.koreanName) || ing.koreanName.includes(di.name))
-    );
+  // 4. [성분 검색] 단독 성분은 시판 약물로 식별되지 않은 경우에만 보완 표시
+  ALL_DRUG_INGREDIENTS.forEach(rule => {
+    const kor = rule.koreanName;
+    const brands = rule.commonBrands || [];
+
+    let isMatch = findFuzzyMatchesInText(combinedFullText, kor, 0.75);
+
+    if (!isMatch && rule.englishName) {
+      isMatch = findFuzzyMatchesInText(combinedFullText, rule.englishName, 0.80);
+    }
+
+    if (!isMatch) {
+      for (const b of brands) {
+        if (findFuzzyMatchesInText(combinedFullText, b, 0.75)) {
+          isMatch = true;
+          break;
+        }
+      }
+    }
+
+    // 이미 감지된 시판 약물(로컬 및 식약처)에 포함된 성분인 경우 단독 성분 카드 생성 생략
+    const isAlreadyInCommercial = detectedCommercials.some(d => 
+      d.ingredients.some(di => di.name.includes(kor) || kor.includes(di.name))
+    ) || apiFetchedDrugs.some(a => {
+      const ingr = a.ITEM_INGR_NAME || a.MAIN_ITEM_INGR || '';
+      return ingr.includes(kor) || kor.includes(ingr);
+    });
+
+    if (isMatch && !isAlreadyInCommercial && !matchedRuleIds.has(rule.id)) {
+      matchedRuleIds.add(rule.id);
+      detectedIngredients.push(rule);
+    }
   });
+
+  const finalIngredients = detectedIngredients;
 
   if (statusArea) {
     statusArea.innerHTML = `
