@@ -648,26 +648,6 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   let matchedRuleIds = new Set();
   let matchedCommercialIds = new Set();
 
-  // 1. 금기/주의 170종 성분 전수 슬라이딩 윈도우 퍼지 매칭
-  ALL_DRUG_INGREDIENTS.forEach(rule => {
-    const kor = rule.koreanName;
-    const brands = rule.commonBrands || [];
-
-    let isMatch = findFuzzyMatchesInText(combinedFullText, kor, 0.75);
-
-    if (!isMatch && rule.englishName) {
-      isMatch = findFuzzyMatchesInText(combinedFullText, rule.englishName, 0.80);
-    }
-
-    if (!isMatch) {
-      for (const b of brands) {
-        if (findFuzzyMatchesInText(combinedFullText, b, 0.75)) {
-          isMatch = true;
-          break;
-        }
-      }
-    }
-
   // 1. 처방전 약품명 단어 정규식 추출 및 접미사 정제 (예: 레일라디에스정_(1정) -> 레일라디에스정, 아트놀셋세미정_(1정) -> 아트놀셋세미정)
   const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
   const potentialDrugNames = new Set();
