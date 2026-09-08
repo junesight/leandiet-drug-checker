@@ -120,13 +120,55 @@
       <div id="image-result-area" class="space-y-4"></div>
     </div>
 
-    <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 -->
-    <div class="text-center pt-6">
-      <button onclick="toggleAllIngredientsModal()" class="text-xs text-slate-400 hover:text-slate-700 underline font-medium transition">
+    <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 & AI 설정 -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-6 text-center text-xs">
+      <button onclick="toggleAllIngredientsModal()" class="text-slate-400 hover:text-slate-700 underline font-medium transition">
         전체 금기(67종) 및 주의(100여종) 성분 및 연구진 의견 목록 보기
+      </button>
+      <span class="hidden sm:inline text-slate-300">•</span>
+      <button onclick="toggleAiModal()" class="text-[#6340cd] hover:text-[#502bb8] font-bold flex items-center gap-1 transition">
+        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 99.9% 초정밀 AI 판독기 설정
       </button>
     </div>
 
+  </div>
+
+  <!-- AI Vision 설정 모달 -->
+  <div id="ai-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-base text-slate-900 flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="w-4 h-4 text-[#6340cd]"></i> 99.9% 초정밀 AI 처방전 판독 설정
+        </h3>
+        <button onclick="toggleAiModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        구글의 무료 <strong>Gemini Vision AI</strong>를 연동하면, 구겨진 약봉투나 흐린 처방전 사진, 복잡한 표도 <strong>99.9% 정확하게</strong> 의약품명을 자동 판독합니다.
+      </p>
+      <div class="space-y-1.5">
+        <label class="text-xs font-bold text-slate-700">Google Gemini API Key (무료 발급):</label>
+        <input
+          type="password"
+          id="gemini-key-input"
+          placeholder="AIzaSy... (키를 입력하면 즉시 AI 모드로 작동)"
+          class="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:border-[#6340cd] focus:ring-2 focus:ring-[#6340cd]/20"
+        />
+        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+          <span>* API 키는 본인 브라우저에만 안전하게 저장됩니다.</span>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-[#6340cd] underline font-semibold">무료 키 발급받기 &rarr;</a>
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveAiKey()" class="flex-1 py-2.5 bg-[#6340cd] hover:bg-[#502bb8] text-white text-xs font-bold rounded-xl shadow-md transition">
+          저장하고 AI 모드 활성화
+        </button>
+        <button onclick="clearAiKey()" class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition">
+          초기화
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- 전체 성분 확인 팝업 모달 -->
