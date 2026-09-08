@@ -55,41 +55,49 @@ function handleSearch(query) {
     return;
   }
 
-  // 1. 로컬 내장 마스터 DB (250+ 의약품 및 170+ 성분)에서 0.01초 즉시 검색
+  // 1. 성분명 검색 우선 확인 (성분명 검색 시에는 개별 약품 목록 없이 성분 판정 카드만 단독 표시)
   const isPureChosung = /^[ㄱ-ㅎ]+$/.test(query);
-
-  const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.filter(drug => {
-    const brand = drug.brandName.toLowerCase();
-    if (!isPureChosung) {
-      if (brand.includes(query) || (drug.company && drug.company.toLowerCase().includes(query))) return true;
-      return drug.ingredients.some(i => i.name.toLowerCase().includes(query));
-    }
-    return getChosung(brand).includes(query);
-  });
 
   const matchedIngredients = ALL_DRUG_INGREDIENTS.filter(ing => {
     const kor = ing.koreanName.toLowerCase();
     const eng = (ing.englishName || '').toLowerCase();
     if (!isPureChosung) {
-      if (kor.includes(query) || eng.includes(query)) return true;
-      return (ing.commonBrands || []).some(b => b.toLowerCase().includes(query));
+      return kor.includes(query) || eng.includes(query);
     }
     return getChosung(kor).includes(query);
   });
 
-  if (matchedCommercial.length > 0 || matchedIngredients.length > 0) {
+  if (matchedIngredients.length > 0) {
     let html = '';
-    matchedCommercial.forEach(drug => { html += renderCommercialCard(drug); });
     matchedIngredients.forEach(ing => {
-      const alreadyCovered = matchedCommercial.some(c => c.brandName.includes(ing.koreanName));
-      if (!alreadyCovered) { html += renderIngredientCard(ing); }
+      html += renderIngredientCard(ing);
     });
     resultArea.innerHTML = html;
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  // 2. 로컬 DB에 없을 경우: 식약처 공공데이터 Open API 실시간 비동기 조회
+  // 2. 약 이름(처방명 / 상표명) 로컬 DB 검색
+  const matchedCommercial = POPULAR_COMMERCIAL_DRUGS.filter(drug => {
+    const brand = drug.brandName.toLowerCase();
+    const comp = (drug.company || '').toLowerCase();
+    if (!isPureChosung) {
+      return brand.includes(query) || comp.includes(query);
+    }
+    return getChosung(brand).includes(query);
+  });
+
+  if (matchedCommercial.length > 0) {
+    let html = '';
+    matchedCommercial.forEach(drug => {
+      html += renderCommercialCard(drug);
+    });
+    resultArea.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // 3. 로컬에 없는 처방명인 경우: 식약처 국가 허가 DB 실시간 API 조회
   renderSearchingIndicator(query);
 
   debounceTimer = setTimeout(() => {
