@@ -643,116 +643,97 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   const combinedFullText = `${normalizedText} ${rawText}`;
   const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
 
-  let detectedIngredients = [];
-  let detectedCommercials = [];
-  let matchedRuleIds = new Set();
-  let matchedCommercialIds = new Set();
-
-  // 1. 처방전 약품명 단어 정규식 추출 및 접미사 정제 (예: 레일라디에스정_(1정) -> 레일라디에스정, 아트놀셋세미정_(1정) -> 아트놀셋세미정)
-  const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
-  const potentialDrugNames = new Set();
+  // 1. 처방전 행별(Row-by-Row) 정밀 의약품 추출
+  const rowDrugCandidates = [];
+  const processedNames = new Set();
 
   lines.forEach(line => {
-    // 괄호 및 언더스코어 용량 접미사 제거
-    const cleanedLine = line.replace(/_?\s*\(\s*\d+\s*(?:정|캡슐|포|매|환|ml|g)\s*\)/gi, ' ')
-                            .replace(/_\s*\d+\s*(?:정|캡슐|포|매|환)/gi, ' ')
-                            .replace(/[\[\]\{\}\<\>\:\;\,\/]/g, ' ');
-    const words = cleanedLine.split(/\s+/);
-    words.forEach(w => {
-      const match = w.match(drugPattern);
-      if (match) {
-        match.forEach(m => {
-          let cleanM = m.replace(/_.*$/, '').trim();
-          if (cleanM.length >= 2 && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정', '판정', '처방'].includes(cleanM)) {
-            potentialDrugNames.add(cleanM);
-          }
+    // 수출명 괄호 정제 (예: (수출명:네오-케이정) 제거)
+    let cleanLine = line.replace(/\(수출명\s*:[^)]*\)/gi, '').trim();
+    // 용량 접미사 제거 (예: _(0.3g/1캡슐), _(1정), _(0.1g/1캡슐))
+    cleanLine = cleanLine.replace(/_?\s*\(\s*[\d\.]+\s*(?:g|mg|ml|정|캡슐|포|매|환)\s*\/\s*\d+\s*(?:정|캡슐|포|매|환)\s*\)/gi, '')
+                         .replace(/_?\s*\(\s*\d+\s*(?:정|캡슐|포|매|환)\s*\)/gi, '')
+                         .replace(/_\s*[\d\.]+\s*(?:g|mg|ml|정|캡슐|포|매|환)/gi, '')
+                         .replace(/_.*$/, '');
+
+    // 괄호 안의 성분명 추출 (예: 뮤코메드캡슐(에르도스테인) -> name: 뮤코메드캡슐, ingr: 에르도스테인)
+    let extractedIngr = '';
+    const parenMatch = cleanLine.match(/\(([^)]+)\)/);
+    if (parenMatch) {
+      extractedIngr = parenMatch[1].trim();
+      cleanLine = cleanLine.replace(/\([^)]+\)/g, '').trim();
+    }
+
+    // 약품명 단어 추출 (정, 캡슐, 서방정, 이알서방정 등)
+    const drugMatch = cleanLine.match(/[가-힣A-Za-z0-9]{2,}(?:이알서방정|서방캡슐|서방정|장용정|건조시럽|점안액|흡입제|캡슐|시럽|과립|패치|액|산|정)/);
+    if (drugMatch) {
+      const drugName = drugMatch[0].trim();
+      if (!processedNames.has(drugName) && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정', '판정', '처방'].includes(drugName)) {
+        processedNames.add(drugName);
+        rowDrugCandidates.push({
+          rawName: drugName,
+          hintIngr: extractedIngr
         });
       }
-    });
+    }
   });
 
-  // 2. [처방명 최우선 검색] 주요 시판 약물 DB 500종 전수 슬라이딩 윈도우 & 후보 단어 매칭
-  POPULAR_COMMERCIAL_DRUGS.forEach(drug => {
-    let isMatch = findFuzzyMatchesInText(combinedFullText, drug.brandName, 0.75);
+  // 2. 각 후보 약물별 마스터 DB 및 식약처 실시간 API 대조
+  let detectedCommercials = [];
+  let apiFetchedDrugs = [];
 
-    if (!isMatch) {
-      for (const cand of potentialDrugNames) {
-        if (drug.brandName.includes(cand) || cand.includes(drug.brandName.replace(/\s*\(.*$/, '')) || stringSimilarity(cand, drug.brandName) >= 0.75) {
-          isMatch = true;
-          break;
+  for (const item of rowDrugCandidates) {
+    const qName = item.rawName;
+    const hIngr = item.hintIngr;
+
+    // A. 로컬 시판약 DB 확인
+    let localMatch = POPULAR_COMMERCIAL_DRUGS.find(d => 
+      d.brandName.includes(qName) || qName.includes(d.brandName.replace(/\s*\(.*$/, '')) || stringSimilarity(qName, d.brandName.replace(/\s*\(.*$/, '')) >= 0.80
+    );
+
+    if (localMatch) {
+      if (!detectedCommercials.some(d => d.id === localMatch.id)) {
+        detectedCommercials.push(localMatch);
+      }
+      continue;
+    }
+
+    // B. 식약처 실시간 API 조회
+    try {
+      let apiItems = [];
+      const serverRes = await fetch(`/api/search?q=${encodeURIComponent(qName)}`);
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (serverData.items && serverData.items.length > 0) {
+          apiItems = serverData.items;
         }
       }
-    }
 
-    if (isMatch && !matchedCommercialIds.has(drug.id)) {
-      matchedCommercialIds.add(drug.id);
-      detectedCommercials.push(drug);
-    }
-  });
-
-  // 3. 미매칭 약품명 후보들 식약처 실시간 공공데이터 API 전수 검색
-  const candidateList = Array.from(potentialDrugNames).filter(cand => {
-    return !detectedCommercials.some(d => d.brandName.includes(cand) || cand.includes(d.brandName.replace(/\s*\(.*$/, '')));
-  }).slice(0, 8);
-
-  let apiFetchedDrugs = [];
-  if (candidateList.length > 0) {
-    for (const cand of candidateList) {
-      try {
-        let items = [];
-        const serverRes = await fetch(`/api/search?q=${encodeURIComponent(cand)}`);
-        if (serverRes.ok) {
-          const serverData = await serverRes.json();
-          if (serverData.items && serverData.items.length > 0) {
-            items = serverData.items;
-          }
+      if (apiItems.length > 0) {
+        const bestItem = apiItems[0];
+        const bestName = bestItem.ITEM_NAME || bestItem.itemName || qName;
+        if (!apiFetchedDrugs.some(a => (a.ITEM_NAME || a.itemName) === bestName)) {
+          apiFetchedDrugs.push(bestItem);
         }
-        if (items.length > 0) {
-          const fetchedItem = items[0];
-          const fetchedName = fetchedItem.ITEM_NAME || fetchedItem.itemName || '';
-          if (!apiFetchedDrugs.some(a => (a.ITEM_NAME || a.itemName) === fetchedName)) {
-            apiFetchedDrugs.push(fetchedItem);
-          }
-        }
-      } catch (e) {}
-    }
+        continue;
+      }
+    } catch (e) {}
+
+    // C. 미매칭 시 괄호 안의 성분명이나 직접 등록된 정보로 카드 구성
+    const customMatch = ALL_DRUG_INGREDIENTS.find(r => 
+      (hIngr && r.koreanName.includes(hIngr)) || r.koreanName.includes(qName) || (r.commonBrands || []).some(b => qName.includes(b))
+    );
+
+    detectedCommercials.push({
+      id: `custom_${qName}`,
+      brandName: qName,
+      company: '처방 의약품',
+      category: '전문의약품 (처방약)',
+      ingredients: [{ name: hIngr || (customMatch ? customMatch.koreanName : '유효성분'), amount: '' }]
+    });
   }
 
-  // 4. [성분 검색] 단독 성분은 시판 약물로 식별되지 않은 경우에만 보완 표시
-  ALL_DRUG_INGREDIENTS.forEach(rule => {
-    const kor = rule.koreanName;
-    const brands = rule.commonBrands || [];
-
-    let isMatch = findFuzzyMatchesInText(combinedFullText, kor, 0.75);
-
-    if (!isMatch && rule.englishName) {
-      isMatch = findFuzzyMatchesInText(combinedFullText, rule.englishName, 0.80);
-    }
-
-    if (!isMatch) {
-      for (const b of brands) {
-        if (findFuzzyMatchesInText(combinedFullText, b, 0.75)) {
-          isMatch = true;
-          break;
-        }
-      }
-    }
-
-    // 이미 감지된 시판 약물(로컬 및 식약처)에 포함된 성분인 경우 단독 성분 카드 생성 생략
-    const isAlreadyInCommercial = detectedCommercials.some(d => 
-      d.ingredients.some(di => di.name.includes(kor) || kor.includes(di.name))
-    ) || apiFetchedDrugs.some(a => {
-      const ingr = a.ITEM_INGR_NAME || a.MAIN_ITEM_INGR || '';
-      return ingr.includes(kor) || kor.includes(ingr);
-    });
-
-    if (isMatch && !isAlreadyInCommercial && !matchedRuleIds.has(rule.id)) {
-      matchedRuleIds.add(rule.id);
-      detectedIngredients.push(rule);
-    }
-  });
-
-  const finalIngredients = detectedIngredients;
+  const finalIngredients = [];
 
   if (statusArea) {
     statusArea.innerHTML = `

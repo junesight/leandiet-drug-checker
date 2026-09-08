@@ -301,7 +301,13 @@ const POPULAR_COMMERCIAL_DRUGS = [
   { id: "relvar", brandName: "렐바엘립타", company: "GSK", category: "천식/COPD 흡입제 (처방약)", ingredients: [{ name: "빌란테롤트리페나테이트", amount: "25mcg" }, { name: "플루티카손", amount: "100~200mcg" }] },
   { id: "seretide", brandName: "세레타이드디스커스 / 에어로솔", company: "GSK", category: "천식 흡입제 (처방약)", ingredients: [{ name: "살메테롤", amount: "50mcg" }, { name: "플루티카손", amount: "100~500mcg" }] },
   { id: "cofu_tab", brandName: "코푸정 / 코푸시럽", company: "유한양행", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "17.5mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] },
+  { id: "codaewon_tab", brandName: "코대원정", company: "대원제약", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "17.5mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "구아이페네신", amount: "50mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] },
   { id: "codaewon_forte", brandName: "코대원포르테시럽 / 코대원에스시럽", company: "대원제약", category: "진해거담제 (처방약)", ingredients: [{ name: "DL-메틸에페드린", amount: "13.1mg" }, { name: "디히드로코데인타르타르산염", amount: "5mg" }, { name: "클로르페니라민말레산염", amount: "1.5mg" }] },
+  { id: "mucomed", brandName: "뮤코메드캡슐 (에르도스테인)", company: "대원제약", category: "진해거담제/기관지염 (처방약)", ingredients: [{ name: "에르도스테인", amount: "300mg" }] },
+  { id: "eldos", brandName: "엘도스캡슐", company: "대웅제약", category: "진해거담제/기관지염 (처방약)", ingredients: [{ name: "에르도스테인", amount: "300mg" }] },
+  { id: "penzal_8hr", brandName: "펜잘8시간이알서방정", company: "종근당", category: "해열진통제 (일반/처방)", ingredients: [{ name: "아세트아미노펜", amount: "650mg" }] },
+  { id: "withus_cefixime", brandName: "위더스세픽심캡슐100밀리그램", company: "위더스제약", category: "세팔로스포린계 항생제 (처방약)", ingredients: [{ name: "세픽심수화물", amount: "100mg" }] },
+  { id: "suprax", brandName: "슈프락스캡슐", company: "동아에스티", category: "세팔로스포린계 항생제 (처방약)", ingredients: [{ name: "세픽심수화물", amount: "100mg" }] },
 
   // --- 정형외과 / 소염진통제 / 위장약 / 호르몬제 처방약 (레일라, 뮤코라민, 프레나, 아트놀셋 등) ---
   { id: "layla_ds", brandName: "레일라디에스정", company: "한국피엠지제약", category: "골관절염/소염진통제 (처방약)", ingredients: [{ name: "당귀·모과·방풍·속단 복합추출물", amount: "405mg" }] },
