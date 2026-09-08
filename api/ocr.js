@@ -35,25 +35,27 @@ export default async function handler(req, res) {
 
     const prompt = `
 당신은 한국 병원 처방전 및 약봉투 전문 판독 AI입니다.
-첨부된 이미지가 90도, 180도, 270도 옆으로 누워있거나 회전되어 있더라도, 방향을 자동 보정하여 처방/조제된 모든 약물 정보를 정확하게 추출하세요.
+첨부된 처방전/약봉투 이미지에 기재된 [조제약 / 처방 의약품 목록]을 1행부터 마지막 행까지 단 하나도 누락 없이 전수(100%) 추출하세요.
 
-다음 JSON 형식으로만 응답하세요:
+방향 규칙:
+- 이미지가 90도, 180도, 270도 회전되어 있더라도 올바른 방향으로 자동 보정하여 판독하세요.
+
+반드시 다음 JSON 형식으로만 응답하세요:
 {
   "drugs": [
     {
-      "name": "약품명 (예: 렉시핀정400mg, 아세브론캡슐, 타이레놀정500mg)",
+      "name": "정식 의약품명 (예: 렉시핀정400mg, 아세브론캡슐, 타이레놀8시간이알서방정)",
       "ingredient": "주요 성분명 (알 수 있는 경우, 예: 독소필린, 아세브로필린, 아세트아미노펜)",
       "dosage": "용량/용법 (예: 1회 1정 1일 2회)"
     }
   ],
-  "rawSummary": "추출된 전체 텍스트 요약"
+  "rawSummary": "추출된 전체 조제약 요약"
 }
 
-규칙:
-1. 이미지가 옆으로 90도 회전되어 있거나 거꾸로 있어도 글자를 완벽히 읽어내세요.
+필수 준수 사항:
+1. 처방전에 적힌 조제약 개수가 3개면 반드시 3개 모두, 5개면 5개 모두 전수 추출해야 합니다. 일부만 추출하지 마세요.
 2. 약품명에서 오타나 불필요한 기호를 제거하고 정식 의약품명으로 정제하세요.
-3. 약봉투나 처방전에 적힌 조제약 목록을 하나도 빠짐없이 모두 포함하세요.
-4. 반드시 유효한 JSON 형식으로만 답변하세요.
+3. 반드시 유효한 JSON 형식으로만 답변하세요.
 `;
 
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -73,7 +75,7 @@ export default async function handler(req, res) {
         }
       ],
       generationConfig: {
-        temperature: 0.1,
+        temperature: 0.0,
         response_mime_type: "application/json"
       }
     };
@@ -95,7 +97,6 @@ export default async function handler(req, res) {
     
     let parsedJson = {};
     try {
-      // 마크다운 코드블록 정제
       const cleanedText = resultText.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
       parsedJson = JSON.parse(cleanedText);
     } catch (e) {

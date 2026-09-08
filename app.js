@@ -22,7 +22,7 @@ function getChosung(str) {
   return result.toLowerCase();
 }
 
-// 레벤슈타인 거리 및 문자열 유사도 계산 (오타 / OCR 오인식 보정)
+// 레벤슈타인 편집 거리 계산
 function levenshteinDistance(s1, s2) {
   if (!s1) return s2 ? s2.length : 0;
   if (!s2) return s1 ? s1.length : 0;
@@ -46,6 +46,7 @@ function levenshteinDistance(s1, s2) {
   return dp[m][n];
 }
 
+// 문자열 유사도 계산
 function stringSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
   const s1Clean = s1.replace(/[\s\-_]/g, '').toLowerCase();
@@ -59,10 +60,35 @@ function stringSimilarity(s1, s2) {
   return (maxLen - dist) / maxLen;
 }
 
+// 연속 텍스트 내 슬라이딩 윈도우(Sliding Window) 퍼지 검색
+function findFuzzyMatchesInText(text, targetWord, threshold = 0.75) {
+  if (!text || !targetWord) return false;
+  const cleanTarget = targetWord.replace(/[\s\-_]/g, '').toLowerCase();
+  const cleanText = text.replace(/[\s\-_]/g, '').toLowerCase();
+
+  // 1. 단순 부분 일치 검사
+  if (cleanText.includes(cleanTarget)) return true;
+
+  const targetLen = cleanTarget.length;
+  if (targetLen <= 1) return false;
+
+  // 2. targetLen ± 1 길이의 슬라이딩 윈도우로 전체 텍스트 스캔
+  for (let len = Math.max(2, targetLen - 1); len <= targetLen + 1; len++) {
+    for (let i = 0; i <= cleanText.length - len; i++) {
+      const windowStr = cleanText.substring(i, i + len);
+      const sim = stringSimilarity(windowStr, cleanTarget);
+      if (sim >= threshold) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 let debounceTimer = null;
 let currentTab = 'text';
 let currentPrescriptionFile = null;
-let currentImageRotation = 0; // 0, 90, 180, 270 도 회전 각도
+let currentImageRotation = 0; // 0, 90, 180, 270
 
 function init() {
   renderInitialGuide();
@@ -72,7 +98,7 @@ function init() {
   if (window.lucide) lucide.createIcons();
 }
 
-// 탭 전환 네비게이션
+// 탭 전환
 function switchTab(tab) {
   currentTab = tab;
   const tabTextBtn = document.getElementById('tab-text-btn');
@@ -125,7 +151,7 @@ function setupClipboardPaste() {
   });
 }
 
-// 드래그 앤 드롭 핸들러
+// 드래그 앤 드롭
 function handleDragOver(e) {
   e.preventDefault();
   e.stopPropagation();
@@ -178,14 +204,12 @@ function handleImageFileSelect(files) {
   }
 }
 
-// 사용자 회전 버튼 핸들러 (시계방향 90도 또는 반시계 90도 회전)
 function rotatePrescription(degrees) {
   if (!currentPrescriptionFile) return;
   currentImageRotation = (currentImageRotation + degrees + 360) % 360;
   processPrescriptionImage(currentPrescriptionFile, currentImageRotation);
 }
 
-// 파일 -> Base64 변환 유틸
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -195,7 +219,7 @@ function fileToBase64(file) {
   });
 }
 
-// 캔버스 기반 회전 + 고화질 전처리 (90도/180도/270도 회전 보정 + 업스케일링 + 대비 극대화)
+// 캔버스 기반 회전 + 고화질 전처리
 async function preprocessAndRotateImage(file, rotationDegrees = 0) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -231,7 +255,7 @@ async function preprocessAndRotateImage(file, rotationDegrees = 0) {
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = imgData.data;
 
-      // Grayscale & Contrast Stretching
+      // 대비 평활화
       let minVal = 255;
       let maxVal = 0;
       for (let i = 0; i < d.length; i += 4) {
@@ -260,7 +284,6 @@ async function preprocessAndRotateImage(file, rotationDegrees = 0) {
   });
 }
 
-// 한국어 처방전 텍스트 정제 (띄어쓰기된 한글 음절 병합 & 노이즈 제거)
 function normalizePrescriptionText(text) {
   if (!text) return '';
   let normalized = text.replace(/([가-힣])\s+([가-힣])\s+([가-힣])\s+([가-힣])/g, '$1$2$3$4')
@@ -270,7 +293,7 @@ function normalizePrescriptionText(text) {
   return normalized;
 }
 
-// 처방전 이미지 판독 파이프라인
+// 처방전 판독 메인 파이프라인
 async function processPrescriptionImage(file, rotationAngle = currentImageRotation) {
   currentPrescriptionFile = file;
   currentImageRotation = rotationAngle;
@@ -284,7 +307,6 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
 
   const savedKey = localStorage.getItem('gemini_api_key') || '';
 
-  // 진행 상태 UI 렌더링 (회전 툴 버튼 포함)
   statusArea.innerHTML = `
     <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
       <div class="flex items-center gap-4">
@@ -303,7 +325,6 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
           </div>
           <div class="flex items-center justify-between pt-0.5">
             <p class="text-[11px] text-slate-400 truncate">${file.name || '처방전 이미지'}${rotationAngle ? ` (${rotationAngle}° 회전됨)` : ''}</p>
-            <!-- 90도 빠른 회전 버튼 -->
             <div class="flex items-center gap-1.5 shrink-0">
               <button onclick="rotatePrescription(-90)" title="반시계 90도 회전" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700 flex items-center gap-0.5 transition">
                 <i data-lucide="rotate-ccw" class="w-3 h-3"></i> -90°
@@ -323,7 +344,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
   const progressBar = document.getElementById('ocr-progress-bar');
   const percentage = document.getElementById('ocr-percentage');
 
-  // STEP 1: Gemini AI Vision 호출 (90도 회전된 사진도 자체적으로 각도 무관 완벽 인식)
+  // STEP 1: Gemini AI Vision 호출 (100% 결정적 추출)
   try {
     const { blob: processedBlob, dataUrl } = await preprocessAndRotateImage(file, rotationAngle);
     const base64Data = dataUrl;
@@ -357,7 +378,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
     console.warn('AI Vision Fallback to Local OCR:', e);
   }
 
-  // STEP 2: 브라우저 고성능 Canvas 회전/전처리 + Tesseract OCR + 자동 4각도 Multi-Scan
+  // STEP 2: 브라우저 고성능 Canvas 회전/전처리 + Tesseract OCR + 슬라이딩 윈도우 퍼지 매칭
   try {
     if (statusText) statusText.innerText = '🔍 고화질 이미지 전처리(대비강화·회전보정) 진행 중...';
     if (progressBar) progressBar.style.width = '30%';
@@ -386,7 +407,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
     let recognizedText = ret.data.text || '';
     let normalizedText = normalizePrescriptionText(recognizedText);
 
-    // 자동 90도 회전 검출 (0도에서 글자가 거의 안 읽힌 경우 자동으로 90도/270도 회전 재시도)
+    // 자동 90도 회전 검출
     if (normalizedText.length < 15 && rotationAngle === 0) {
       if (statusText) statusText.innerText = '🔄 90도 회전 처방전 자동 감지 및 재분석 중...';
       const rotated90 = await preprocessAndRotateImage(file, 90);
@@ -402,7 +423,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
 
     await worker.terminate();
 
-    if (statusText) statusText.innerText = '약물 및 성분 퍼지 매칭 대조 중...';
+    if (statusText) statusText.innerText = '연속 슬라이딩 윈도우 의약품 대조 중...';
     if (progressBar) progressBar.style.width = '100%';
     if (percentage) percentage.innerText = '100%';
 
@@ -543,7 +564,6 @@ ${rawSummary}
   if (window.lucide) lucide.createIcons();
 }
 
-// 요약 배너 생성 유틸
 function renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalCount) {
   if (prohibitedCount > 0) {
     return `
@@ -614,12 +634,13 @@ function renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalCoun
   `;
 }
 
-// 추출된 처방전 텍스트에서 퍼지 매칭 의약품 분석
+// 텍스트에서 연속 슬라이딩 윈도우 퍼지 매칭으로 완벽한 의약품 전수 검출
 async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   const resultArea = document.getElementById('image-result-area');
   const statusArea = document.getElementById('image-status-area');
   if (!resultArea) return;
 
+  const combinedFullText = `${normalizedText} ${rawText}`;
   const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
 
   let detectedIngredients = [];
@@ -627,24 +648,24 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   let matchedRuleIds = new Set();
   let matchedCommercialIds = new Set();
 
-  // 1. 금기/주의 170종 성분 퍼지 매칭
+  // 1. 금기/주의 170종 성분 전수 슬라이딩 윈도우 퍼지 매칭
   ALL_DRUG_INGREDIENTS.forEach(rule => {
     const kor = rule.koreanName;
-    const eng = rule.englishName;
     const brands = rule.commonBrands || [];
 
-    let isMatch = false;
-    if (normalizedText.includes(kor) || rawText.includes(kor)) isMatch = true;
-    if (eng && (normalizedText.toLowerCase().includes(eng.toLowerCase()) || rawText.toLowerCase().includes(eng.toLowerCase()))) isMatch = true;
-    if (brands.some(b => normalizedText.includes(b) || rawText.includes(b))) isMatch = true;
+    let isMatch = findFuzzyMatchesInText(combinedFullText, kor, 0.75);
+
+    if (!isMatch && rule.englishName) {
+      isMatch = findFuzzyMatchesInText(combinedFullText, rule.englishName, 0.80);
+    }
 
     if (!isMatch) {
-      lines.forEach(line => {
-        if (stringSimilarity(line, kor) >= 0.70) isMatch = true;
-        brands.forEach(b => {
-          if (stringSimilarity(line, b) >= 0.75) isMatch = true;
-        });
-      });
+      for (const b of brands) {
+        if (findFuzzyMatchesInText(combinedFullText, b, 0.75)) {
+          isMatch = true;
+          break;
+        }
+      }
     }
 
     if (isMatch && !matchedRuleIds.has(rule.id)) {
@@ -653,16 +674,9 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   });
 
-  // 2. 주요 시판 약물 DB 500종 퍼지 매칭
+  // 2. 주요 시판 약물 DB 500종 전수 슬라이딩 윈도우 퍼지 매칭
   POPULAR_COMMERCIAL_DRUGS.forEach(drug => {
-    let isMatch = false;
-    if (normalizedText.includes(drug.brandName) || rawText.includes(drug.brandName)) isMatch = true;
-
-    if (!isMatch) {
-      lines.forEach(line => {
-        if (stringSimilarity(line, drug.brandName) >= 0.75) isMatch = true;
-      });
-    }
+    let isMatch = findFuzzyMatchesInText(combinedFullText, drug.brandName, 0.75);
 
     if (isMatch && !matchedCommercialIds.has(drug.id)) {
       matchedCommercialIds.add(drug.id);
@@ -670,7 +684,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   });
 
-  // 3. 처방전 의약품 패턴 추출
+  // 3. 처방전 패턴 단어 정규식 추출
   const drugPattern = /([가-힣A-Za-z0-9]{2,}(?:정|캡슐|시럽|액|산|패치|과립|서방정|장용정|서방캡슐|건조시럽|점안액|흡입제))/g;
   const potentialDrugNames = new Set();
 
@@ -681,7 +695,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
       const match = w.match(drugPattern);
       if (match) {
         match.forEach(m => {
-          if (m.length >= 2 && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정'].includes(m)) {
+          if (m.length >= 2 && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정'].includes(m)) {
             potentialDrugNames.add(m);
           }
         });
@@ -689,7 +703,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     });
   });
 
-  // 식약처 실시간 API 보완 검색
+  // 식약처 실시간 API 보완 검색 (중복 제외)
   const candidateList = Array.from(potentialDrugNames).filter(cand => {
     return !detectedCommercials.some(d => d.brandName.includes(cand) || cand.includes(d.brandName)) &&
            !detectedIngredients.some(i => cand.includes(i.koreanName));
@@ -714,7 +728,13 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     }
   }
 
-  // 상태 UI
+  // 중복 정리: 시판 약물에 포함된 성분과 단독 성분 중복 시 시판 약물 우선 표기
+  const finalIngredients = detectedIngredients.filter(ing => {
+    return !detectedCommercials.some(d => 
+      d.ingredients.some(di => di.name.includes(ing.koreanName) || ing.koreanName.includes(di.name))
+    );
+  });
+
   if (statusArea) {
     statusArea.innerHTML = `
       <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center justify-between">
@@ -739,12 +759,11 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     `;
   }
 
-  // 통계 계산
   let prohibitedCount = 0;
   let cautionCount = 0;
   let safeCount = 0;
 
-  detectedIngredients.forEach(i => {
+  finalIngredients.forEach(i => {
     if (i.status === 'PROHIBITED') prohibitedCount++;
     else if (i.status === 'CAUTION') cautionCount++;
     else safeCount++;
@@ -778,11 +797,11 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     else safeCount++;
   });
 
-  const totalDetected = detectedIngredients.length + detectedCommercials.length + apiFetchedDrugs.length;
+  const totalDetected = finalIngredients.length + detectedCommercials.length + apiFetchedDrugs.length;
   const summaryBanner = renderSummaryBanner(prohibitedCount, cautionCount, safeCount, totalDetected);
 
   let cardsHtml = '';
-  detectedIngredients.forEach(ing => { cardsHtml += renderIngredientCard(ing); });
+  finalIngredients.forEach(ing => { cardsHtml += renderIngredientCard(ing); });
   detectedCommercials.forEach(drug => { cardsHtml += renderCommercialCard(drug); });
   apiFetchedDrugs.forEach(item => {
     const itemName = item.ITEM_NAME || item.itemName || '';
@@ -1077,7 +1096,6 @@ function renderSearchingIndicator(query) {
   `;
 }
 
-// 초기 화면 안내 (가로 3단 상태 박스)
 function renderInitialGuide() {
   const resultArea = document.getElementById('result-area');
   if (!resultArea) return;
@@ -1109,7 +1127,6 @@ function renderInitialGuide() {
   if (window.lucide) lucide.createIcons();
 }
 
-// 시판 의약품 카드 렌더링
 function renderCommercialCard(drug) {
   let isProhibited = false;
   let isCaution = false;
@@ -1205,7 +1222,6 @@ function renderCommercialCard(drug) {
   `;
 }
 
-// 단일 성분 카드 렌더링
 function renderIngredientCard(ing) {
   const isProhibited = ing.status === 'PROHIBITED';
   const isCaution = ing.status === 'CAUTION';
@@ -1252,7 +1268,6 @@ function renderIngredientCard(ing) {
   `;
 }
 
-// 검색 결과 없을 때
 function renderNotFound(query) {
   const resultArea = document.getElementById('result-area');
   if (!resultArea) return;
@@ -1273,7 +1288,6 @@ function renderNotFound(query) {
   if (window.lucide) lucide.createIcons();
 }
 
-// 전체 목록 팝업 렌더링
 function renderAllModalList() {
   const container = document.getElementById('modal-list');
   if (!container) return;
@@ -1299,7 +1313,6 @@ function toggleAllIngredientsModal() {
   }
 }
 
-// AI 모달 & API 키 관리
 function toggleAiModal() {
   const modal = document.getElementById('ai-modal');
   if (modal) {
