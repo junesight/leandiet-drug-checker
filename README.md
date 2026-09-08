@@ -2,6 +2,8 @@
 
 다이어트 한약 처방 시 환자가 복용 중인 양약의 성분을 즉각 분석하여 **병용 가능 / 병용 주의 / 병용 불가** 여부와 임상 연구진 의견을 실시간으로 판정해 주는 한의원 전용 초고속 웹 애플리케이션입니다.
 
+👉 **웹 바로가기**: [https://junesight.github.io/leandiet-drug-checker/](https://junesight.github.io/leandiet-drug-checker/)
+
 ---
 
 ## ✨ 주요 기능
