@@ -8,6 +8,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tesseract.js for OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -18,7 +20,7 @@
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-start text-slate-800 antialiased pt-12 sm:pt-20 px-4 pb-16">
+<body class="min-h-screen flex flex-col items-center justify-start text-slate-800 antialiased pt-12 sm:pt-16 px-4 pb-16">
 
   <!-- 메인 컨테이너 -->
   <div class="w-full max-w-2xl mx-auto space-y-6">
@@ -32,32 +34,94 @@
       <p class="text-xs sm:text-sm text-slate-500 font-medium">약 이름이나 성분명을 검색하면 다이어트 한약(마황제) 병용 가능 여부를 즉시 알려드립니다.</p>
     </div>
 
-    <!-- 대형 깔끔한 검색창 (구글 스타일) -->
-    <div class="relative shadow-md rounded-2xl bg-white border border-slate-200 focus-within:border-[#6340cd] focus-within:ring-4 focus-within:ring-[#6340cd]/15 transition-all">
-      <div class="flex items-center px-4 py-3.5">
-        <i data-lucide="search" class="w-5 h-5 text-slate-400 mr-3 shrink-0"></i>
-        <input
-          id="search-input"
-          type="text"
-          autofocus
-          autocomplete="off"
-          placeholder="약 이름이나 성분명을 입력하세요."
-          class="w-full text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent font-medium"
-          oninput="handleSearch(this.value)"
-        />
-        <button id="clear-btn" onclick="clearInput()" class="hidden text-slate-400 hover:text-slate-600 p-1">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
+    <!-- 탭 전환 네비게이션 -->
+    <div class="flex items-center justify-center p-1 bg-slate-200/70 rounded-2xl max-w-sm mx-auto shadow-inner">
+      <button
+        id="tab-text-btn"
+        onclick="switchTab('text')"
+        class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl text-xs sm:text-sm font-bold transition-all bg-white text-[#6340cd] shadow-sm"
+      >
+        <i data-lucide="search" class="w-4 h-4"></i>
+        이름/성분명 검색
+      </button>
+      <button
+        id="tab-image-btn"
+        onclick="switchTab('image')"
+        class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3.5 rounded-xl text-xs sm:text-sm font-bold transition-all text-slate-500 hover:text-slate-800"
+      >
+        <i data-lucide="camera" class="w-4 h-4"></i>
+        처방전 이미지 검색
+      </button>
+    </div>
+
+    <!-- 1. 이름/성분명 검색 뷰 -->
+    <div id="view-text" class="space-y-6">
+      <!-- 대형 검색창 (구글 스타일) -->
+      <div class="relative shadow-md rounded-2xl bg-white border border-slate-200 focus-within:border-[#6340cd] focus-within:ring-4 focus-within:ring-[#6340cd]/15 transition-all">
+        <div class="flex items-center px-4 py-3.5">
+          <i data-lucide="search" class="w-5 h-5 text-slate-400 mr-3 shrink-0"></i>
+          <input
+            id="search-input"
+            type="text"
+            autofocus
+            autocomplete="off"
+            placeholder="약 이름이나 성분명을 입력하세요."
+            class="w-full text-base sm:text-lg text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent font-medium"
+            oninput="handleSearch(this.value)"
+          />
+          <button id="clear-btn" onclick="clearInput()" class="hidden text-slate-400 hover:text-slate-600 p-1">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 텍스트 검색 결과 영역 -->
+      <div id="result-area" class="space-y-4">
+        <!-- 초기 가로 3색 박스 또는 검색 결과가 렌더링됩니다 -->
       </div>
     </div>
 
-    <!-- 검색 결과 영역 -->
-    <div id="result-area" class="space-y-4">
-      <!-- 초기 안내 / 검색 결과가 직관적으로 렌더링됩니다 -->
+    <!-- 2. 처방전 이미지 검색 뷰 -->
+    <div id="view-image" class="space-y-6 hidden">
+      <!-- 드래그 & 드롭 / 찾아보기 / 붙여넣기 첨부 영역 -->
+      <div
+        id="dropzone"
+        onclick="document.getElementById('image-file-input').click()"
+        ondragover="handleDragOver(event)"
+        ondragleave="handleDragLeave(event)"
+        ondrop="handleDrop(event)"
+        class="border-2 border-dashed border-slate-300 hover:border-[#6340cd] bg-white hover:bg-[#f3f0fc]/30 rounded-2xl p-8 text-center cursor-pointer transition-all shadow-sm space-y-3"
+      >
+        <input
+          type="file"
+          id="image-file-input"
+          accept="image/*"
+          class="hidden"
+          onchange="handleImageFileSelect(this.files)"
+        />
+        <div class="w-14 h-14 rounded-full bg-[#f3f0fc] text-[#6340cd] flex items-center justify-center mx-auto shadow-sm">
+          <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+        </div>
+        <div class="space-y-1">
+          <p class="text-sm sm:text-base font-bold text-slate-800">
+            처방전 또는 약봉투 사진을 여기에 끌어다 놓으세요
+          </p>
+          <p class="text-xs text-slate-500">
+            📁 <span class="text-[#6340cd] font-bold underline">파일 찾아보기</span> 클릭 또는 📋 <span class="font-bold text-slate-700">Ctrl + V</span> 로 캡처 이미지 붙여넣기 가능
+          </p>
+        </div>
+        <p class="text-[11px] text-slate-400">JPG, PNG, GIF 이미지 파일 지원 · OCR 자동 텍스트 인식</p>
+      </div>
+
+      <!-- 이미지 상태 및 프로그레스 표시 영역 -->
+      <div id="image-status-area" class="hidden"></div>
+
+      <!-- 이미지 분석 결과 영역 -->
+      <div id="image-result-area" class="space-y-4"></div>
     </div>
 
     <!-- 하단 전체 금기/주의 성분 목록 보기 버튼 -->
-    <div class="text-center pt-8">
+    <div class="text-center pt-6">
       <button onclick="toggleAllIngredientsModal()" class="text-xs text-slate-400 hover:text-slate-700 underline font-medium transition">
         전체 금기(67종) 및 주의(100여종) 성분 및 연구진 의견 목록 보기
       </button>
@@ -85,7 +149,7 @@
     복사되었습니다.
   </div>
 
-  <script src="drugData.js?v=20260908_1700"></script>
-  <script src="app.js?v=20260908_1700"></script>
+  <script src="drugData.js?v=20260908_1810"></script>
+  <script src="app.js?v=20260908_1810"></script>
 </body>
 </html>
