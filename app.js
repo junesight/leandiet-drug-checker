@@ -643,11 +643,27 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
   const combinedFullText = `${normalizedText} ${rawText}`;
   const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // 1. 처방전 행별(Row-by-Row) 정밀 의약품 추출
+  // 1. 처방전 행별(Row-by-Row) 정밀 의약품 추출 (상단 헤더 정보 및 병원명 제외)
   const rowDrugCandidates = [];
   const processedNames = new Set();
 
+  const ignoreWords = [
+    '환자', '환자정', '환자정보', '정보', '병원', '의원', '약국', '조제', '교부', '교부번호', 
+    '발행', '발행일', '안내', '복약', '복약안내', '약품사진', '약품명', '올바른', '올바른정', 
+    '정형외과', '내과', '이비인후과', '소아과', '외과', '약사', '일자', '번호', '성명', '이름', 
+    '용법', '용량', '효능', '효과', '주의', '보관', '식전', '식후', '아침', '점심', '저녁', '취침', 
+    '일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정', '판정', '처방'
+  ];
+
   lines.forEach(line => {
+    // 헤더/환자정보/병원정보/테이블 헤더 라인은 분석에서 원천 제외
+    if (line.includes('환자정보') || line.includes('교부번호') || line.includes('병원정보') || 
+        line.includes('조제약사') || line.includes('조제일자') || line.includes('발행일') || 
+        line.includes('약품사진') || line.includes('약품명') || line.includes('복약안내') ||
+        line.includes('의원') || line.includes('병원') || line.includes('약국')) {
+      return;
+    }
+
     // 수출명 괄호 정제 (예: (수출명:네오-케이정) 제거)
     let cleanLine = line.replace(/\(수출명\s*:[^)]*\)/gi, '').trim();
     // 용량 접미사 제거 (예: _(0.3g/1캡슐), _(1정), _(0.1g/1캡슐))
@@ -668,7 +684,7 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     const drugMatch = cleanLine.match(/[가-힣A-Za-z0-9]{2,}(?:이알서방정|서방캡슐|서방정|장용정|건조시럽|점안액|흡입제|캡슐|시럽|과립|패치|액|산|정)/);
     if (drugMatch) {
       const drugName = drugMatch[0].trim();
-      if (!processedNames.has(drugName) && !['일정', '용정', '수정', '개정', '과정', '행정', '지정', '안정', '적정', '확정', '배정', '판정', '처방'].includes(drugName)) {
+      if (!processedNames.has(drugName) && !ignoreWords.includes(drugName)) {
         processedNames.add(drugName);
         rowDrugCandidates.push({
           rawName: drugName,
@@ -686,10 +702,11 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
     const qName = item.rawName;
     const hIngr = item.hintIngr;
 
-    // A. 로컬 시판약 DB 확인
-    let localMatch = POPULAR_COMMERCIAL_DRUGS.find(d => 
-      d.brandName.includes(qName) || qName.includes(d.brandName.replace(/\s*\(.*$/, '')) || stringSimilarity(qName, d.brandName.replace(/\s*\(.*$/, '')) >= 0.80
-    );
+    // A. 로컬 시판약 DB 정밀/퍼지 확인 (오타 자동 보정: 예: 르코하민정 -> 뮤코라민정)
+    let localMatch = POPULAR_COMMERCIAL_DRUGS.find(d => {
+      const cleanB = d.brandName.replace(/\s*\(.*$/, '').trim();
+      return cleanB === qName || cleanB.includes(qName) || qName.includes(cleanB) || stringSimilarity(qName, cleanB) >= 0.70;
+    });
 
     if (localMatch) {
       if (!detectedCommercials.some(d => d.id === localMatch.id)) {
@@ -719,18 +736,17 @@ async function analyzePrescriptionText(normalizedText, rawText, imageUrl) {
       }
     } catch (e) {}
 
-    // C. 미매칭 시 괄호 안의 성분명이나 직접 등록된 정보로 카드 구성
-    const customMatch = ALL_DRUG_INGREDIENTS.find(r => 
-      (hIngr && r.koreanName.includes(hIngr)) || r.koreanName.includes(qName) || (r.commonBrands || []).some(b => qName.includes(b))
-    );
-
-    detectedCommercials.push({
-      id: `custom_${qName}`,
-      brandName: qName,
-      company: '처방 의약품',
-      category: '전문의약품 (처방약)',
-      ingredients: [{ name: hIngr || (customMatch ? customMatch.koreanName : '유효성분'), amount: '' }]
-    });
+    // C. 괄호 안의 성분명이 존재하는 경우에만 유효 의약품으로 인정
+    if (hIngr) {
+      const customMatch = ALL_DRUG_INGREDIENTS.find(r => r.koreanName.includes(hIngr) || hIngr.includes(r.koreanName));
+      detectedCommercials.push({
+        id: `custom_${qName}`,
+        brandName: qName,
+        company: '처방 의약품',
+        category: '전문의약품 (처방약)',
+        ingredients: [{ name: hIngr, amount: '' }]
+      });
+    }
   }
 
   const finalIngredients = [];
