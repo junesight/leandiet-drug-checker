@@ -72,8 +72,8 @@ export default async function handler(req, res) {
       }
     };
 
-    // Google Gemini Vision API 호출 (최신 모델 다중 캐스케이드 지원)
-    const modelsToTry = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+    // Google Gemini Vision API 호출 (하루 500건 무료 제공되는 gemini-3.5-flash-lite 기본값 사용)
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash'];
     let lastError = null;
     let successfulData = null;
 
