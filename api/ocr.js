@@ -24,9 +24,6 @@ export default async function handler(req, res) {
     const defaultKey = Buffer.from('QVEuQWI4Uk42TDB1aEVnV2tSS1VPOVdoeTFzbVRlZUE2VVZ4Nm1VQkgtRjdtMzEtSWZDTEE=', 'base64').toString('utf-8');
     const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || defaultKey;
 
-    // Google Gemini 3.6 Flash Vision API 호출 (최신 초정밀 모델)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${effectiveApiKey}`;
-
     const prompt = `
 당신은 대한민국 병원 처방전 및 약봉투 전문 판독 의료 AI입니다.
 첨부된 처방전/약봉투 이미지에 기재된 [처방 의약품 / 조제약 목록]을 분석하세요.
@@ -75,19 +72,38 @@ export default async function handler(req, res) {
       }
     };
 
-    const response = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    // Google Gemini Vision API 호출 (최신 모델 다중 캐스케이드 지원)
+    const modelsToTry = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+    let lastError = null;
+    let successfulData = null;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Gemini API Error:', errText);
-      return res.status(200).json({ success: false, fallback: true, error: errText });
+    for (const model of modelsToTry) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${effectiveApiKey}`;
+        const response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          successfulData = await response.json();
+          break;
+        } else {
+          lastError = await response.text();
+          console.warn(`Model ${model} failed (${response.status}):`, lastError.slice(0, 100));
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
-    const data = await response.json();
+    if (!successfulData) {
+      console.error('All Gemini Vision models exhausted/failed:', lastError);
+      return res.status(200).json({ success: false, fallback: true, error: lastError });
+    }
+
+    const data = successfulData;
     const resultText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     
     let parsedJson = {};
