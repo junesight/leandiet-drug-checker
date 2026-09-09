@@ -448,7 +448,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
         <div class="flex-1 min-w-0 space-y-1">
           <div class="flex items-center justify-between">
             <span id="ocr-status-text" class="text-xs sm:text-sm font-bold text-slate-800">
-              ✨ Google Gemini AI Vision 으로 초정밀 분석중...
+              ✨ Google Gemini AI Vision 으로 정밀 분석중...
             </span>
             <span id="ocr-percentage" class="text-xs font-extrabold text-[#6340cd]">0%</span>
           </div>
@@ -481,7 +481,7 @@ async function processPrescriptionImage(file, rotationAngle = currentImageRotati
     const { blob: processedBlob, dataUrl } = await preprocessAndRotateImage(file, rotationAngle);
     const base64Data = dataUrl;
     
-    if (statusText) statusText.innerText = '✨ Google Gemini AI Vision 으로 초정밀 분석중...';
+    if (statusText) statusText.innerText = '✨ Google Gemini AI Vision 으로 정밀 분석중...';
     if (progressBar) progressBar.style.width = '45%';
     if (percentage) percentage.innerText = '45%';
 
@@ -587,7 +587,7 @@ async function renderAiVisionResults(drugs, rawSummary, imageUrl, totalPrescribe
           <img src="${imageUrl}" alt="첨부 처방전" class="w-12 h-12 object-cover rounded-xl border border-slate-200 shrink-0" />
           <div>
             <div class="flex items-center gap-1.5 text-xs font-bold text-[#6340cd]">
-              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ✨ Google Gemini AI Vision 초정밀 분석 완료 (${drugs.length}종 식별)
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ✨ Google Gemini AI Vision 정밀 분석 완료 (${drugs.length}종 식별)
             </div>
             <p class="text-xs text-slate-500">처방전의 의약품 및 성분 대조가 완료되었습니다.</p>
           </div>
